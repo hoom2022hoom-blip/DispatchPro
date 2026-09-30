@@ -13,6 +13,7 @@ export default function Home() {
     const router = useRouter();
 
     useEffect(() => {
+        if (process.env.NEXT_PUBLIC_RECEPTION_BACKEND === 'api') return;
         if (!loading) {
             if (!user) {
                 router.push('/login');
@@ -24,7 +25,7 @@ export default function Home() {
         }
     }, [user, loading, router, hasRole]);
 
-    if (loading || !user || !hasRole(Role.DISPATCHER)) {
+    if (process.env.NEXT_PUBLIC_RECEPTION_BACKEND !== 'api' && (loading || !user || !hasRole(Role.DISPATCHER))) {
         return (
             <div className="flex h-screen w-full items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin" />

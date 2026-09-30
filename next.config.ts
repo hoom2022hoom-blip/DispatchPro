@@ -7,7 +7,7 @@ const isDevelopment = process.env.NODE_ENV === 'development';
 const nextConfig: NextConfig = {
   /* config options here */
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
   eslint: {
     ignoreDuringBuilds: true,
@@ -33,6 +33,11 @@ const nextConfig: NextConfig = {
 };
 
 const pwaConfig = {
+  // Tenant-authenticated reception responses must never enter the shared offline cache.
+  runtimeCaching: [
+    { urlPattern: /\/api\/(?:customer\/|reception\/|calls(?:\?|$))/, handler: 'NetworkOnly', method: 'GET' },
+    ...require('next-pwa/cache'),
+  ],
   dest: 'public',
   register: !isDevelopment,
   skipWaiting: !isDevelopment,

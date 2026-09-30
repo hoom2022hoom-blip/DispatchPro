@@ -98,16 +98,10 @@ export function TraccarProvider({ children, autoLogin = true }: TraccarProviderP
   }, [devices]);
 
   // Auto-login on mount if enabled
-  useEffect(() => {
-    if (autoLogin) {
-      const defaultEmail = process.env.NEXT_PUBLIC_TRACCAR_EMAIL || 'admin';
-      const defaultPassword = process.env.NEXT_PUBLIC_TRACCAR_PASSWORD || 'admin';
-      
-      login(defaultEmail, defaultPassword).catch(error => {
-        console.warn('Auto-login to Traccar failed:', error);
-      });
-    }
-  }, [autoLogin, login]);
+useEffect(() => {
+    // Traccar disabled temporarily for local development
+    setLoading(false);
+  }, []);
 
   // Set up periodic refresh when authenticated
   useEffect(() => {

@@ -1,6 +1,7 @@
 
 
 "use client";
+import { activeRideStatuses } from "@/lib/ride-status";
 
 import React, { useState, useMemo, useEffect } from 'react';
 import type { Ride, Driver, Message, Shift, AppUser } from '@/lib/types';
@@ -205,7 +206,7 @@ export function DriverDashboard() {
   const driverRides = useMemo(() => {
     if (!currentDriver) return [];
     return rides
-      .filter(r => ['assigned', 'in-progress'].includes(r.status))
+      .filter(r => activeRideStatuses.includes(r.status))
       .sort((a, b) => {
         if (a.status === 'in-progress') return -1;
         if (b.status === 'in-progress') return 1;

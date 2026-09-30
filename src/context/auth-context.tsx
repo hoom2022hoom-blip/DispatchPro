@@ -216,8 +216,35 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       throw error;
     }
   }, []);
+const LOCAL_DEV_MODE = process.env.NODE_ENV === 'development';
 
   useEffect(() => {
+        if (pathname.startsWith('/office') || pathname === '/driver' || (process.env.NEXT_PUBLIC_RECEPTION_BACKEND === 'api' && (pathname === '/' || pathname === '/admin/map'))) {
+          setUser(null); setAllUsers([]); setFirebaseUser(null); setLoading(false);
+          return;
+        }
+        if (LOCAL_DEV_MODE) {
+      const localUser = {
+        uid: 'local-admin',
+        id: 'local-admin',
+        email: 'admin@taxinablus.local',
+        displayName: 'مدير مكتب تكسي نابلس والمهندس',
+        name: 'مدير المكتب',
+    role: Role.DISPATCHER | Role.ADMIN | Role.OWNER,
+        photoURL: null,
+      } as AppUser;
+
+      setUser(localUser);
+      setAllUsers([localUser]);
+      setFirebaseUser(null);
+      setLoading(false);
+
+      if (pathname === '/login' || pathname === '/register') {
+        router.push('/');
+      }
+
+      return;
+    }
     let unsubscribeUsers: (() => void) | null = null;
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (fbUser) => {

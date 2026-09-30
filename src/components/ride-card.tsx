@@ -1,5 +1,6 @@
 
 "use client";
+import { activeRideStatuses } from "@/lib/ride-status";
 
 import React, { useState, useEffect, useMemo } from 'react';
 import type { Ride, RideStatus, Shift, RideTag } from '@/lib/types';
@@ -35,6 +36,10 @@ type RideCardProps = {
 };
 
 const statusConfig: Record<RideStatus, { color: string; icon: React.ReactNode }> = {
+  waiting: { color: 'bg-yellow-400', icon: <Clock className="h-3 w-3" /> },
+  'driver-accepted': { color: 'bg-blue-500', icon: <Truck className="h-3 w-3" /> },
+  'driver-arriving': { color: 'bg-blue-500', icon: <Truck className="h-3 w-3" /> },
+  arrived: { color: 'bg-blue-500', icon: <Truck className="h-3 w-3" /> },
   pending: { color: 'bg-yellow-400', icon: <Clock className="h-3 w-3" /> },
   assigned: { color: 'bg-blue-500', icon: <Truck className="h-3 w-3" /> },
   'in-progress': { color: 'bg-indigo-500', icon: <Loader2 className="h-3 w-3 animate-spin" /> },
@@ -249,12 +254,12 @@ export function RideCard({ ride, shifts, onAssignDriver, onChangeStatus, onSetFa
                 </DropdownMenuPortal>
             </DropdownMenuSub>
         )}
-        {['assigned', 'in-progress'].includes(ride.status) && (
+        {activeRideStatuses.includes(ride.status) && (
             <DropdownMenuItem onClick={() => onUnassignDriver(ride.id)}>
                 <Undo2 className="mr-2 h-4 w-4" /> Unassign
             </DropdownMenuItem>
         )}
-        {['assigned', 'in-progress'].includes(ride.status) && (
+        {activeRideStatuses.includes(ride.status) && (
             <DropdownMenuSub>
                 <DropdownMenuSubTrigger>Re-assign</DropdownMenuSubTrigger>
                 <DropdownMenuPortal>

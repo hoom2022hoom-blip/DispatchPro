@@ -1,0 +1,9 @@
+{
+  "apiUrl": "https://YOUR-API-HOST",
+  "tenant": "YOUR-OFFICE-SLUG",
+  "tenantId": "00000000-0000-0000-0000-000000000000",
+  "sourceDirectory": "calls",
+  "stateDirectory": "office-bridge-state",
+  "credentialsFile": "office-bridge.credentials.json",
+  "startAfter": "2026-09-27T00:00:00Z"
+}

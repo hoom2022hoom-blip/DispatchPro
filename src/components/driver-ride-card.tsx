@@ -58,6 +58,12 @@ export function DriverRideCard({ ride, onEdit, isQueued = false }: DriverRideCar
                         <Users className="text-muted-foreground" />
                         <span>{ride.passengerCount || 1} Passenger(s)</span>
                     </div>
+                    {ride.passengerName && (
+    <div className="flex items-center gap-2">
+        <span className="font-semibold">اسم الزبون:</span>
+        <span>{ride.passengerName}</span>
+    </div>
+)}
                     {ride.passengerPhone && (
                         <div className="flex items-center gap-2">
                             <Phone className="text-muted-foreground" />

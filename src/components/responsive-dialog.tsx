@@ -42,7 +42,7 @@ export function ResponsiveDialog({ open, onOpenChange, title, children }: Respon
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl">
+      <DialogContent className="max-h-[88vh] max-w-[min(90vw,1200px)] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>

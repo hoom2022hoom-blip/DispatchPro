@@ -8,13 +8,15 @@ import TestRenderer,{act} from 'react-test-renderer';
 import {dispatchStates,changeDispatch,dispatchState,receptionColumns,duplicateReceptionRide} from '../src/lib/office-dispatch.ts';
 import {businessDay} from '../src/lib/ride-numbering.ts';
 
-test('dispatch mock has eight text/color states and requires a driver before sending',()=>{
- assert.equal(Object.keys(dispatchStates).length,8);
+test('dispatch states include arriving and require a driver before sending',()=>{
+ assert.equal(Object.keys(dispatchStates).length,9);
  for(const state of Object.values(dispatchStates)){assert.ok(state.label);assert.match(state.color,/bg-/);assert.match(state.color,/text-/);}
  const ride={status:'pending',driverId:null};assert.throws(()=>changeDispatch(ride,'SENT'),/السائق/);
  const selected={...ride,driverId:'driver'};assert.equal(dispatchState(selected),'PENDING');
  assert.equal(changeDispatch(selected,'SENT').status,'assigned');assert.equal(changeDispatch(selected,'SENT').shiftId,null);
  assert.equal(changeDispatch(selected,'REJECTED').status,'waiting');assert.equal(changeDispatch(selected,'CANCELLED').driverId,null);
+ assert.equal(dispatchState({status:'driver-arriving',dispatchStatus:'ACCEPTED'}),'ARRIVING');
+ assert.equal(changeDispatch(selected,'ARRIVING').status,'driver-arriving');
 });
 
 test('mounted unified queue searches drivers, adds once, selects and reorders from fixed controls',async()=>{
@@ -53,7 +55,8 @@ test('mounted reception has exact columns, send and no cancellation control or m
   const textOf=node=>node.children.map(child=>typeof child==='string'?child:textOf(child)).join('');assert.deepEqual(renderer.root.findAllByType('th').map(textOf),receptionColumns);
   assert.ok(!receptionColumns.includes('إلغاء'));
   const button=text=>renderer.root.findAllByType('button').find(b=>b.children.join('')===text);
-  assert.equal(button('إرسال').props.disabled,true);
+  assert.equal(button('إرسال').props.disabled,false);
+  await act(async()=>button('إرسال').props.onClick());assert.equal(saves.length,0);assert.match(renderer.root.findByProps({role:'alert'}).children.join(''),/السائق/);
   await act(async()=>renderer.root.findAllByType('button').find(b=>b.findAllByType('span').some(s=>s.children.includes('عنوان'))).props.onClick());
   await act(async()=>renderer.root.findByType('textarea').props.onChange({target:{value:'عنوان يدوي معدل'}}));
   await act(async()=>renderer.root.find(n=>n.props['aria-label']==='نوع العنوان').props.onChange({target:{value:'VARIABLE'}}));
@@ -66,6 +69,10 @@ test('mounted reception has exact columns, send and no cancellation control or m
   await act(async()=>renderer.root.find(n=>n.props['aria-label']==='حالة الطلب 1').props.onChange({target:{value:'ACCEPTED'}}));assert.equal(saves.at(-1).dispatchStatus,'ACCEPTED');
   assert.equal(renderer.root.findAllByType('button').some(item=>item.children.join('')==='إلغاء'),false);
   assert.equal(renderer.root.find(n=>n.props['aria-label']==='حالة الطلب 1').findAllByType('option').some(item=>item.props.value==='CANCELLED'),false);
+  for(const [state,color] of [['PENDING','yellow'],['SENT','amber'],['ACCEPTED','green'],['REJECTED','orange'],['ARRIVING','blue'],['ARRIVED','cyan'],['STARTED','violet'],['COMPLETED','gray']]){
+   ride={...ride,dispatchStatus:state,status:dispatchStates[state].status};await act(async()=>renderer.update(render()));
+   assert.match(renderer.root.findByType('tbody').findByType('tr').props.className,new RegExp('bg-'+color+'-'));
+  }
  }finally{await act(async()=>renderer?.unmount());hooks.deregister();delete globalThis.__unifiedUi;}
 });
 

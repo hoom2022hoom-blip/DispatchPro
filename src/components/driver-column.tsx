@@ -1,6 +1,7 @@
 
 
 "use client";
+import { activeRideStatuses } from "@/lib/ride-status";
 
 import React, { useState, useMemo } from 'react';
 import type { Ride, Driver, RideStatus, Shift, Vehicle } from '@/lib/types';
@@ -39,6 +40,10 @@ type DriverColumnProps = {
 };
 
 const statusSortOrder: Record<RideStatus, number> = {
+  waiting: 3,
+  'driver-accepted': 2,
+  'driver-arriving': 2,
+  arrived: 2,
   'in-progress': 1,
   'assigned': 2,
   'pending': 3,
@@ -72,7 +77,7 @@ export function DriverColumn({
 
   const activeRides = useMemo(() => {
     return rides
-      .filter(r => r.status === 'assigned' || r.status === 'in-progress')
+      .filter(r => activeRideStatuses.includes(r.status))
       .sort((a, b) => statusSortOrder[a.status] - statusSortOrder[b.status]);
   }, [rides]);
 

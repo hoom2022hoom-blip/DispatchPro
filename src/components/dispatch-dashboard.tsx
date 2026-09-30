@@ -1,7 +1,19 @@
 
 
 "use client";
+import { activeRideStatuses } from "@/lib/ride-status";
 
+import { sourceLabels, type CallSource, type CallEvent } from '@/lib/call-events';
+import { localRides, localDrivers, localVehicles, localShifts, localQueue, createLocalShift } from '@/lib/local-reception';
+import { getReceptionBackend } from '@/lib/reception-backend';
+import { ApiReception } from './api-reception';
+import { liveQuery } from 'dexie';
+import { useIncomingCall } from '@/hooks/use-incoming-call';
+import type { QueueEntry, QueueAction } from '@/lib/driver-queue';
+import { DriverQueuePanel } from './driver-queue-panel';
+import { ReceptionTable } from './reception-table';
+import { ReceptionEditForm } from './reception-edit-form';
+import { ReceptionFooter } from './reception-footer';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Ride, Driver, RideStatus, Message, Shift, Vehicle, AppUser, Ban } from '@/lib/types';
 import { Role, DISPATCHER_ID, dispatcherUser, SUPPORT_TICKETS_ID } from '@/lib/types';
@@ -25,7 +37,7 @@ import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/comp
 import { ResponsiveDialog } from './responsive-dialog';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, updateDoc, doc, serverTimestamp, where, query, or, Timestamp, writeBatch, getDocs } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, updateDoc, doc, serverTimestamp, where, query, or, Timestamp, writeBatch, getDocs, deleteField } from 'firebase/firestore';
 import { StartShiftForm } from './start-shift-form';
 import { endShift } from '@/app/admin/actions';
 import { toggleStarMessage } from '@/app/actions';
@@ -64,6 +76,12 @@ function DispatchDashboardUI() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [bans, setBans] = useState<Ban[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [queueEntries, setQueueEntries] = useState<QueueEntry[]>([]);
+  const [showQueue, setShowQueue] = useState(true);
+  const [draftCall, setDraftCall] = useState<{phone: string; source: CallSource; name?: string}>({ phone: '', source: 'MANUAL' });
+  const [draftVersion, setDraftVersion] = useState(0);
+  const [callToOpen, setCallToOpen] = useState<CallEvent | null>(null);
+  const [showReception, setShowReception] = useState(true);
   const [isShiftFormOpen, setIsShiftFormOpen] = useState(false);
   const [isBanCheckOpen, setIsBanCheckOpen] = useState(false);
   const [editingShift, setEditingShift] = useState<Shift | null>(null);
@@ -77,9 +95,21 @@ function DispatchDashboardUI() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   
   const { user, hasRole } = useAuth();
+  const isLocalDemo = process.env.NODE_ENV === 'development' && user?.uid === 'local-admin';
+  const receptionBackend = getReceptionBackend(isLocalDemo);
+  const receiveCall = useCallback(async (event: import('@/lib/call-events').CallEvent) => {
+    await receptionBackend.receiveCall(event);
+    if (event.source === 'WHATSAPP' || event.source === 'LANDLINE_ICALL') setShowReception(true);
+  }, [receptionBackend]);
+  const { call: lastIncomingCall, connection: callConnection } = useIncomingCall(receiveCall, !!user);
   const [isNotificationToggleChecked, setIsNotificationToggleChecked] = useState(user?.settings?.sendAssignmentNotifications ?? true);
   const isMobile = useIsMobile();
   const { toast } = useToast();
+  useEffect(() => {
+    if (!callToOpen) return;
+    const ride = rides.find(item => item.callEventId === callToOpen.eventId);
+    if (ride) { setEditingRide(ride); setIsFormOpen(true); setCallToOpen(null); }
+  }, [rides, callToOpen]);
   
   const { zoom, zoomIn, zoomOut } = React.useContext(ZoomContext);
   const { isCondensed, toggleCondensedMode } = useCondensedMode();
@@ -106,10 +136,21 @@ function DispatchDashboardUI() {
 
   useEffect(() => {
     if (!user) return;
+    if (isLocalDemo) {
+      const subscription = liveQuery(async () => ({
+        rides: await localRides.toArray(), drivers: await localDrivers.toArray(),
+        vehicles: await localVehicles.toArray(), shifts: await localShifts.toArray(), queue: await localQueue.get('main'),
+      })).subscribe({
+        next: data => { setRides(data.rides); setDrivers(data.drivers); setVehicles(data.vehicles); setShifts(data.shifts); setQueueEntries(data.queue?.entries ?? []); },
+        error: () => toast({ variant: 'destructive', title: 'تعذر قراءة بيانات المكتب المحلية' }),
+      });
+      return () => subscription.unsubscribe();
+    }
     
     const toDate = (ts: any) => ts instanceof Timestamp ? ts.toDate() : ts;
 
     const unsubscribers = [
+      onSnapshot(doc(db, 'dispatch', 'driverQueue'), snapshot => setQueueEntries(snapshot.data()?.entries ?? []), () => toast({ variant: 'destructive', title: 'تعذر قراءة الدور' })),
       onSnapshot(collection(db, "rides"), (snapshot) => {
           const ridesData = snapshot.docs.map(doc => ({
               ...doc.data(),
@@ -210,6 +251,20 @@ function DispatchDashboardUI() {
         unsubscribers.forEach(unsub => unsub());
     };
   }, [user, hasRole]);
+
+  const numberingInFlight = React.useRef(new Set<string>());
+  useEffect(() => {
+    if (isLocalDemo) return;
+    const missing = rides.filter(ride => !ride.orderNumber && ride.createdAt instanceof Date && !numberingInFlight.current.has(ride.id))
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
+    missing.forEach(ride => numberingInFlight.current.add(ride.id));
+    void (async () => {
+      for (const ride of missing) {
+        try { await receptionBackend.ensureRideNumber(ride); }
+        catch { toast({ variant: 'destructive', title: 'تعذر تخصيص رقم لبعض الطلبات؛ أعد تحميل الشاشة للمحاولة' }); break; }
+      }
+    })();
+  }, [rides, isLocalDemo, receptionBackend, toast]);
   
   const activeShifts = useMemo(() => shifts
     .filter(s => s.status === 'active')
@@ -228,6 +283,18 @@ function DispatchDashboardUI() {
         return { ...shift, driver, vehicle, totalFare };
     })
     .filter(s => s.driver && s.vehicle), [shifts, drivers, vehicles, rides]);
+
+  const shiftChoices = useMemo(() => activeShifts.map(shift => {
+    const queueIndex = queueEntries.findIndex(entry => entry.shiftId === shift.id);
+    return { id: shift.id, driverId: shift.driverId, label: `${shift.driver?.name} — ${shift.vehicle?.nickname}`,
+      disabled: shift.driver?.status === 'offline' || rides.some(ride => ride.driverId === shift.driverId && activeRideStatuses.includes(ride.status)),
+      queuePosition: queueIndex < 0 ? undefined : queueIndex + 1 };
+  }).sort((a, b) => (a.queuePosition ?? Infinity) - (b.queuePosition ?? Infinity) || a.label.localeCompare(b.label)), [activeShifts, queueEntries, rides]);
+
+  const handleQueueChange = async (action: QueueAction) => {
+    if (action.type === 'add' && shiftChoices.find(choice => choice.id === action.shiftId)?.disabled) throw new Error('السائق مشغول أو غير متصل');
+    await receptionBackend.changeQueue(action);
+  };
 
   const { p2pMessages, dispatchChannelMessages } = useMemo(() => {
     if (!user) return { p2pMessages: [], dispatchChannelMessages: [] };
@@ -352,7 +419,7 @@ function DispatchDashboardUI() {
   }, [p2pMessages, dispatchChannelMessages, user, allUsers, drivers]);
 
 
-  const allPendingRides = rides.filter(r => r.status === 'pending');
+  const allPendingRides = rides.filter(r => r.status === 'pending' || r.status === 'waiting');
   
   const pendingRides = allPendingRides
     .filter(r => !r.scheduledTime)
@@ -403,45 +470,24 @@ function DispatchDashboardUI() {
     };
   }, [carouselApi, activeShifts, hasScheduledRides]);
 
-  const handleAddRide = async (newRideData: Omit<Ride, 'id' | 'status' | 'driverId' | 'createdAt' | 'updatedAt' | 'isNew' | 'shiftId'>) => {
-    if (!db) return;
-    
-    const rideToSave = {
-        ...newRideData,
-        scheduledTime: newRideData.scheduledTime || undefined,
-    };
+  const persistRide = async (ride: Ride) => {
+    if (ride.driverId && activeRideStatuses.includes(ride.status) && rides.some(other => other.id !== ride.id && other.driverId === ride.driverId && activeRideStatuses.includes(other.status))) throw new Error('السائق مشغول بطلب آخر');
+    await receptionBackend.saveRide(ride);
+  };
 
-    const newRide: Omit<Ride, 'id'> = {
-      ...rideToSave,
-      status: 'pending',
-      driverId: null,
-      shiftId: null,
-      createdAt: serverTimestamp() as any,
-      updatedAt: serverTimestamp() as any,
-      isNew: true,
-    };
-    const docRef = await addDoc(collection(db, 'rides'), newRide);
+  const handleAddRide = async (newRideData: Omit<Ride, 'id' | 'status' | 'driverId' | 'createdAt' | 'updatedAt' | 'isNew'> & { id?: string; status?: RideStatus; driverId?: string | null }) => {
+    await persistRide({ ...newRideData, id: newRideData.id ?? crypto.randomUUID(), status: newRideData.status ?? 'pending', driverId: newRideData.driverId ?? null, createdAt: new Date(), updatedAt: new Date() });
     setIsFormOpen(false);
-    
-    setTimeout(async () => {
-        if (!db) return;
-        await updateDoc(doc(db, 'rides', docRef.id), { isNew: false });
-    }, 5000);
   };
   
   const handleEditRide = async (updatedRide: Ride) => {
-    if (!db) return;
-    const { id, ...rideData } = updatedRide;
-    
-    // Filter out undefined values to avoid Firestore errors
-    const filteredRideData = Object.fromEntries(
-      Object.entries({
-        ...rideData,
-        updatedAt: serverTimestamp()
-      }).filter(([_, value]) => value !== undefined)
-    );
-    
-    await updateDoc(doc(db, 'rides', id), filteredRideData);
+    const previous = rides.find(ride => ride.id === updatedRide.id);
+    const now = new Date();
+    await persistRide({ ...updatedRide, updatedAt: now,
+      ...(previous?.status !== updatedRide.status && updatedRide.status === 'completed' ? { droppedOffAt: now } : {}),
+      ...(previous?.status !== updatedRide.status && updatedRide.status === 'in-progress' ? { pickedUpAt: now } : {}),
+      ...(previous?.status !== updatedRide.status && updatedRide.status === 'cancelled' ? { cancelledAt: now } : {}),
+    });
     setEditingRide(null);
     setIsFormOpen(false);
   }
@@ -454,15 +500,16 @@ function DispatchDashboardUI() {
     const shift = activeShifts.find(s => s.id === shiftId);
     if (!shift || !shift.driver) return;
 
-    await updateDoc(doc(db, 'rides', rideId), {
+    await persistRide({
+        ...rideToAssign,
         status: 'assigned',
         driverId: shift.driverId,
         shiftId: shift.id,
-        updatedAt: serverTimestamp(),
-        assignedAt: serverTimestamp()
+        updatedAt: new Date(),
+        assignedAt: new Date()
     });
 
-    if (isNotificationToggleChecked) {
+    if (isNotificationToggleChecked && !isLocalDemo) {
       let messageText = `New Ride Assignment\n\n`;
       messageText += `Pickup: ${rideToAssign.pickup.name}\n`;
       if (rideToAssign.dropoff) {
@@ -481,7 +528,7 @@ function DispatchDashboardUI() {
           senderId: DISPATCHER_ID,
           recipientId: shift.driverId,
           text: messageText,
-      });
+      }).catch(() => toast({ title: 'تم تعيين السائق؛ تعذر إرسال إشعار التعيين' }));
     }
   };
   
@@ -490,21 +537,35 @@ function DispatchDashboardUI() {
     const ride = rides.find(r => r.id === rideId);
     if (!ride || !ride.driverId) return;
 
-    await updateDoc(doc(db, 'rides', rideId), {
+    await persistRide({
+        ...ride,
         status: 'pending',
         driverId: null,
         shiftId: null,
-        updatedAt: serverTimestamp(),
-        assignedAt: null
+        updatedAt: new Date(),
+        assignedAt: undefined
     });
   };
 
   const handleUnscheduleRide = async (rideId: string) => {
-    if (!db) return;
-    await updateDoc(doc(db, 'rides', rideId), {
-        scheduledTime: null,
-        updatedAt: serverTimestamp()
-    });
+    const ride = rides.find(item => item.id === rideId);
+    if (ride) await persistRide({ ...ride, scheduledTime: undefined, updatedAt: new Date() });
+  };
+
+  const handleReceptionAssign = async (rideId: string, shiftId: string) => {
+    const ride = rides.find(item => item.id === rideId);
+    if (!ride || !['pending', 'waiting', 'assigned'].includes(ride.status)) throw new Error('هذا الطلب غير متاح للتعيين');
+    if (shiftId) await handleAssignDriver(rideId, shiftId); else await handleUnassignDriver(rideId);
+  };
+
+  const handleReceptionDrop = (result: DropResult) => {
+    if (!result.destination || !result.draggableId.startsWith('queue:')) return;
+    const shiftId = result.draggableId.slice('queue:'.length);
+    const destination = result.destination;
+    const operation = destination.droppableId === 'driver-queue'
+      ? handleQueueChange({ type: 'move', shiftId, beforeShiftId: queueEntries.filter(entry => entry.shiftId !== shiftId)[destination.index]?.shiftId })
+      : destination.droppableId.startsWith('ride:') ? handleReceptionAssign(destination.droppableId.slice(5), shiftId) : Promise.resolve();
+    void operation.catch(error => toast({ variant: 'destructive', title: error instanceof Error ? error.message : 'تعذر التعيين' }));
   };
 
   const onDragEnd = (result: DropResult) => {
@@ -534,9 +595,13 @@ function DispatchDashboardUI() {
     if (!db) return;
     const rideToUpdate = rides.find(ride => ride.id === rideId);
     if (!rideToUpdate) return;
+    if (rideToUpdate.receptionPending && activeRideStatuses.includes(newStatus)) {
+      toast({ variant: 'destructive', title: 'أكمل بيانات الاستقبال قبل تعيين السائق' });
+      return;
+    }
     
     if (rideToUpdate.status === 'cancelled' && newStatus === 'pending') {
-        const { id, createdAt, updatedAt, assignedAt, pickedUpAt, droppedOffAt, cancelledAt, status, ...restOfRide } = rideToUpdate;
+        const { id, orderDay, orderNumber, createdAt, updatedAt, assignedAt, pickedUpAt, droppedOffAt, cancelledAt, status, ...restOfRide } = rideToUpdate;
         const newRide: Omit<Ride, 'id'|'createdAt'|'updatedAt'> = {
             ...restOfRide,
             status: 'pending',
@@ -544,12 +609,14 @@ function DispatchDashboardUI() {
             shiftId: null,
             isNew: true,
         };
-        await addDoc(collection(db, 'rides'), {
-            ...newRide,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp()
-        });
+        await handleAddRide(newRide);
         return;
+    }
+
+    if (isLocalDemo) {
+      await handleEditRide({ ...rideToUpdate, status: newStatus,
+        ...(newStatus === 'cancelled' ? { driverId: null, shiftId: null } : {}) });
+      return;
     }
 
     const updateData: any = { status: newStatus, updatedAt: serverTimestamp() };
@@ -580,14 +647,43 @@ function DispatchDashboardUI() {
   };
   
   const handleOpenEdit = (ride: Ride) => {
+    setCallToOpen(null);
     setEditingRide(ride);
     setIsFormOpen(true);
   }
 
   const handleOpenLogNew = () => {
+    setCallToOpen(null);
+    setDraftVersion(value => value + 1);
+    setDraftCall({phone: "", source: "MANUAL"});
     setEditingRide(null);
     setIsFormOpen(true);
   }
+
+  const handleOpenLandline = () => {
+    setCallToOpen(null);
+    setDraftVersion(value => value + 1);
+    setDraftCall({ phone: '0000', source: 'LANDLINE_ICALL', name: 'أرضي' });
+    setEditingRide(null);
+    setIsFormOpen(true);
+  };
+
+  const handleOpenLastCall = async () => {
+    if (!lastIncomingCall || callToOpen) return;
+    const existing = rides.find(ride => ride.callEventId === lastIncomingCall.eventId);
+    if (existing?.receptionPending) { handleOpenEdit(existing); return; }
+    if (!existing && ['WHATSAPP', 'LANDLINE_ICALL'].includes(lastIncomingCall.source)) {
+      // Use the existing create-only integration while waiting for its subscription.
+      setCallToOpen(lastIncomingCall);
+      try { await receptionBackend.receiveCall(lastIncomingCall); }
+      catch { setCallToOpen(null); toast({ variant: 'destructive', title: 'تعذر فتح طلب المكالمة؛ حاول مجددًا' }); }
+      return;
+    }
+    setDraftVersion(value => value + 1);
+    setDraftCall({ phone: lastIncomingCall.phone, source: lastIncomingCall.source });
+    setEditingRide(null);
+    setIsFormOpen(true);
+  };
 
   const handleSendMessage = async (message: Omit<Message, 'id' | 'timestamp' | 'isReadBy'>) => {
     if (!db || !user) return;
@@ -868,7 +964,7 @@ function DispatchDashboardUI() {
                 <DriverColumn
                   key={shift.id}
                   shift={shift}
-                  rides={rides.filter(r => ['assigned', 'in-progress', 'completed'].includes(r.status) && r.shiftId === shift.id)}
+                  rides={rides.filter(r => [...activeRideStatuses, 'completed'].includes(r.status) && r.shiftId === shift.id)}
                   allShifts={activeShifts}
                   allDrivers={drivers}
                   onAssignDriver={handleAssignDriver}
@@ -962,7 +1058,7 @@ function DispatchDashboardUI() {
                         <div className="pr-1">
                           <DriverColumn
                               shift={shift}
-                              rides={rides.filter(r => ['assigned', 'in-progress', 'completed'].includes(r.status) && r.shiftId === shift.id)}
+                              rides={rides.filter(r => [...activeRideStatuses, 'completed'].includes(r.status) && r.shiftId === shift.id)}
                               allShifts={activeShifts}
                               allDrivers={drivers}
                               onAssignDriver={handleAssignDriver}
@@ -1009,32 +1105,47 @@ function DispatchDashboardUI() {
   }
 
   return (
-    <div className="h-full flex flex-col bg-secondary/50">
-      <div className="flex h-16 shrink-0 items-center border-b bg-card px-6 shadow-sm">
-        <div className="flex items-center gap-2">
+    <div dir="rtl" className="h-full flex flex-col bg-secondary/50">
+      <div dir="rtl" className="flex flex-wrap items-center gap-3 border-b bg-yellow-100 px-4 py-2 text-yellow-950">
+        <strong>آخر مكالمة:</strong>
+        <button type="button" disabled={!lastIncomingCall || !!callToOpen} onDoubleClick={() => void handleOpenLastCall()} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); void handleOpenLastCall(); } }} aria-label="آخر مكالمة — انقر مرتين لفتح الطلب" title="انقر مرتين لفتح طلب المكالمة" className="flex min-w-[180px] items-center gap-3 rounded-md border border-yellow-400 bg-yellow-200 px-4 py-2 text-lg font-bold focus-visible:outline focus-visible:outline-2 disabled:opacity-60">
+          {lastIncomingCall ? <><bdi>{lastIncomingCall.phone}</bdi><span className="rounded bg-white/80 px-2 py-1" aria-label={sourceLabels[lastIncomingCall.source]}>{lastIncomingCall.source === 'WHATSAPP' ? 'W' : lastIncomingCall.source === 'LANDLINE_ICALL' ? 'LANDLINE · أرضي' : sourceLabels[lastIncomingCall.source]}</span></> : 'لا توجد مكالمة'}
+        </button>
+        <span className="text-xs">{callToOpen ? 'جارٍ فتح طلب المكالمة…' : 'انقر مرتين على آخر مكالمة لفتح الطلب وتعبئة بياناته'}</span>
+        <span className="text-xs" role="status">{callConnection}</span>
+        {lastIncomingCall?.line && <span className="text-xs">الخط: {lastIncomingCall.line}</span>}
+        {isLocalDemo && <span className="text-xs">وضع تجريبي — الطلبات محفوظة في هذا المتصفح</span>}
+      </div>
+      <div className="flex min-h-16 shrink-0 flex-wrap items-center gap-2 border-b bg-card px-3 py-2 shadow-sm">
+        <div className="flex flex-wrap items-center gap-2">
             <Button size={isMobile ? 'sm' : 'default'} onClick={handleOpenLogNew}>
                 <PlusCircle />
-                Log New Call
+                طلب جديد
             </Button>
+            <Button variant="outline" size={isMobile ? 'sm' : 'default'} onClick={handleOpenLandline}>أرضي</Button>
             <ResponsiveDialog 
                 open={isFormOpen} 
                 onOpenChange={setIsFormOpen}
-                title={editingRide ? 'Edit Ride Details' : 'Log New Call'}
+                title={editingRide ? 'تعديل الطلب' : 'طلب جديد'}
             >
-                <CallLoggerForm 
-                key={editingRide?.id || 'new'}
+                {editingRide ? <ReceptionEditForm key={editingRide.id} ride={editingRide} onSave={handleEditRide} /> : <CallLoggerForm
+                key={`new-${draftVersion}`}
                 onAddRide={handleAddRide} 
                 onEditRide={handleEditRide}
                 rideToEdit={editingRide}
-                />
+                initialPhone={draftCall.phone}
+                initialName={draftCall.name}
+                initialSource={draftCall.source}
+                shifts={shiftChoices}
+                />}
             </ResponsiveDialog>
-            <Button variant="outline" size={isMobile ? 'sm' : 'default'} onClick={() => setIsShiftFormOpen(true)}>
+            <Button variant="outline" size={isMobile ? 'sm' : 'default'} onClick={() => { if (isLocalDemo) { setShowReception(true); setShowQueue(true); } else setIsShiftFormOpen(true); }}>
                 <Briefcase />
-                Start Shift
+                بدء وردية
             </Button>
             <Button variant="outline" size={isMobile ? 'sm' : 'default'} onClick={() => setIsBanCheckOpen(true)}>
                 <ShieldCheck />
-                Check Ban List
+                قائمة الحظر
             </Button>
              <ResponsiveDialog 
                 open={isShiftFormOpen} 
@@ -1044,6 +1155,8 @@ function DispatchDashboardUI() {
                 <StartShiftForm onFormSubmit={() => setIsShiftFormOpen(false)} />
             </ResponsiveDialog>
         </div>
+        <Button variant="outline" onClick={() => setShowReception(value => !value)}>{showReception ? 'لوحة السائقين' : 'قائمة الطلبات'}</Button>
+        <Button variant="outline" onClick={() => { setShowReception(true); setShowQueue(value => !value); }}>الدور ({queueEntries.length})</Button>
         <div className="ml-auto items-center gap-4 hidden md:flex">
              <TooltipProvider>
                 <Tooltip>
@@ -1097,7 +1210,12 @@ function DispatchDashboardUI() {
         </div>
       </div>
 
-      <div className="flex flex-1 flex-row overflow-hidden">
+      {showReception ? <DragDropContext onDragEnd={handleReceptionDrop}>
+        <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-auto p-2 lg:flex-row">
+          {showQueue && <DriverQueuePanel entries={queueEntries} choices={shiftChoices} onChange={handleQueueChange} onCreateLocalShift={isLocalDemo ? createLocalShift : undefined} />}
+          <ReceptionTable rides={rides} drivers={drivers} onEdit={handleOpenEdit} choices={shiftChoices} onAssign={handleReceptionAssign} />
+        </div>
+      </DragDropContext> : <div className="flex flex-1 flex-row overflow-hidden">
         {/* Sidebar */}
         <div className={cn(
             'flex flex-col gap-4 p-2 transition-all duration-300 ease-in-out',
@@ -1111,6 +1229,8 @@ function DispatchDashboardUI() {
         </div>
       </div>
 
+      }
+      <ReceptionFooter total={rides.length} />
       <div className="fixed bottom-6 right-24 z-50 flex flex-col items-center gap-3">
           <Button
             variant="secondary"
@@ -1318,6 +1438,7 @@ function DispatchDashboardUI() {
 
 
 export function DispatchDashboard() {
+  if (process.env.NEXT_PUBLIC_RECEPTION_BACKEND === 'api') return <ApiReception />;
   return (
     <ZoomProvider>
         <CondensedModeProvider>

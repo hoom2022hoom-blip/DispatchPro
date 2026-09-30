@@ -1,0 +1,14 @@
+import {build} from 'esbuild';
+import postcss from 'postcss';
+import tailwindcss from 'tailwindcss';
+import {mkdir,readFile,writeFile,copyFile} from 'node:fs/promises';
+import {fileURLToPath} from 'node:url';
+import path from 'node:path';
+const root=fileURLToPath(new URL('../../',import.meta.url));
+const mobile=path.join(root,'driver-android');
+const output=path.join(mobile,'app/src/main/assets');
+await mkdir(output,{recursive:true});
+await build({absWorkingDir:root,entryPoints:[path.join(mobile,'web/main.tsx')],outfile:path.join(output,'app.js'),bundle:true,minify:true,platform:'browser',target:'chrome100',jsx:'automatic',define:{'process.env.NODE_ENV':'"production"'},alias:{'@':path.join(root,'src'),'@/lib/notifications':path.join(mobile,'web/notifications.ts')},metafile:true}).then(result=>writeFile(path.join(output,'bundle-meta.json'),JSON.stringify(result.metafile)));
+const css=await postcss([tailwindcss({content:[path.join(root,'src/components/driver-api-dashboard.tsx'),path.join(mobile,'web/*.{tsx,html}')],theme:{},plugins:[]})]).process(await readFile(path.join(mobile,'web/styles.css'),'utf8'),{from:undefined});
+await writeFile(path.join(output,'app.css'),css.css);await copyFile(path.join(mobile,'web/index.html'),path.join(output,'index.html'));
+console.log('Bundled the existing DriverApiDashboard and driver-api; no Next.js or backend build.');

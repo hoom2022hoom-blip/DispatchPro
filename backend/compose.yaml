@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgis/postgis:16-3.5
+    environment:
+      POSTGRES_DB: dispatchpro
+      POSTGRES_USER: dispatchpro
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set a local database password before starting}
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - dispatchpro_postgres:/var/lib/postgresql/data
+      - ./db/001_reception.sql:/docker-entrypoint-initdb.d/001_reception.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dispatchpro -d dispatchpro"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+volumes:
+  dispatchpro_postgres:

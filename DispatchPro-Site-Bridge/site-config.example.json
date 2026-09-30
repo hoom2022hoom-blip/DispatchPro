@@ -1,0 +1,17 @@
+{
+  "mode": "local-whatsapp",
+  "siteId": "NEW-STABLE-SITE-UUID",
+  "officeId": "LOCAL-OFFICE-UUID",
+  "tenantId": "LOCAL-OFFICE-UUID",
+  "tenant": "LOCAL-OFFICE-SLUG",
+  "apiUrl": "http://127.0.0.1:9010",
+  "credentials": { "username": "LOCAL-RECEPTION-USER", "password": "LOCAL-RECEPTION-PASSWORD" },
+  "whatsappTcpHost": "0.0.0.0",
+  "whatsappTcpPort": 5050,
+  "requireEventId": true,
+  "sourceDirectory": "data/local-calls",
+  "stateDirectory": "data/local-bridge",
+  "logFile": "logs/local-site.log",
+  "startAfter": "2026-09-28T00:00:00.000Z",
+  "mirror": { "enabled": false, "host": "127.0.0.1", "port": 3520 }
+}

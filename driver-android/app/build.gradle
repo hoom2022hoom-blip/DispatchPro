@@ -1,0 +1,19 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'com.dispatchpro.driver'
+    compileSdk { version = release(36) { minorApiLevel = 1 } }
+    defaultConfig {
+        applicationId 'com.dispatchpro.driver'
+        minSdk 24
+        targetSdk 36
+        versionCode 3
+        versionName '0.1.2'
+        buildConfigField 'String', 'DEFAULT_API_URL', '"https://mall-pressing-sept-developmental.trycloudflare.com"'
+    }
+    buildFeatures { buildConfig true }
+    // Field APK: signed with the existing local Android development key.
+    // Keep the same key for upgrades; production signing can be supplied later.
+    buildTypes { release { minifyEnabled false; debuggable false; signingConfig signingConfigs.debug } }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_11; targetCompatibility JavaVersion.VERSION_11 }
+}

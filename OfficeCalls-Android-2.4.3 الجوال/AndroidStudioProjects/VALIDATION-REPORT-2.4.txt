@@ -1,0 +1,33 @@
+Office Calls 2.4 - Validation Report
+
+A) One call with 10 ringing notification updates:
+   PASS - all updates share one active eventId; only the first claims transmission.
+
+B) Same person calls again after the first call ends:
+   PASS - notification removal/finished state closes the active event; the next call gets a new eventId.
+
+C) Same eventId reaches Windows repeatedly:
+   PASS - duplicates are acknowledged and logged, but Send-ToGridCMS is not called again.
+
+D) Two different calls arrive rapidly:
+   PASS - each closed/new lifecycle has its own eventId and both are processed.
+
+E) Caller is stored by name:
+   PASS by code inspection - the name is used only for local ContactIndex lookup; only a normalized number is sent.
+
+F) Many rapid WhatsApp Business calls:
+   PASS - Android state operations are synchronized, network work uses a bounded executor,
+   Windows event memory is time/size bounded, and each real call produces one GRIDCMS UDP packet.
+
+Protocol checks:
+- Android -> Windows TCP port 5050 unchanged.
+- Windows -> GRIDCMS broadcast UDP port 3520 unchanged.
+- Caller ID packet structure and 62-byte record length unchanged; WhatsApp uses valid line code 04 (shown as L=4).
+- No phone-number cooldown and no 60-second phone block.
+- Outgoing/ongoing calls are rejected; only an incoming-call phrase or answer+decline actions can start an event.
+- Office Calls history shows W as the WhatsApp source marker.
+
+Build environment note:
+The included Gradle wrapper requires Gradle 9.5.0 on first use. Source and lifecycle tests were
+validated here, but this isolated environment could not download the Gradle distribution.
+Android Studio on the development computer can sync the included project and build the APK normally.

@@ -38,7 +38,7 @@ export function MainHeader() {
   const { user, firebaseUser, logout, hasRole, loading } = useAuth();
   const isMobile = useIsMobile();
   const pathname = usePathname();
-  
+  if (pathname.startsWith('/office') || pathname === '/driver') return null;
   if (loading || !user) {
     return (
         <header className="flex h-16 shrink-0 items-center border-b bg-card px-6 shadow-sm">

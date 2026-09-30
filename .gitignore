@@ -8,9 +8,26 @@ firebaseAuthKey.key
 # Next.js
 /.next/
 /out/
+/.dispatchpro-local/
+/public/sw.js
+/public/workbox-*.js
 
 # Production
 /build
+/backend/**/bin/
+/backend/**/obj/
+/driver-android/.gradle/
+/driver-android/app/build/
+/driver-android/build/
+/driver-android/app/src/main/assets/
+/driver-android/local.properties
+/driver-android/google-services.json
+/driver-android/app/google-services.json
+/.tools/
+/DispatchPro-Site-Bridge/credentials.json
+/DispatchPro-Site-Bridge/site-config.json
+/DispatchPro-Site-Bridge/data/
+/DispatchPro-Site-Bridge/logs/
 
 # Misc
 .DS_Store
@@ -21,3 +38,39 @@ firebaseAuthKey.key
 /pnpm-lock.yaml
 /yarn.lock
 /package-lock.json
+# Local secrets and runtime configuration (keep example templates)
+.env
+.env.*
+!.env.example
+**/credentials.json
+**/integration-config.json
+/DispatchPro-Office-Bridge-FINAL/config.json
+**/local.properties
+*.pfx
+*.p12
+*.jks
+*.keystore
+
+# Generated output, logs, caches and local datasets
+*.tsbuildinfo
+*.log
+*.trx
+*.zip
+*.apk
+*.exe
+*.dll
+*.pdb
+**/TestResults/
+**/.kotlin/
+**/.gradle/
+**/node_modules/
+/DispatchPro-Office-Bridge-FINAL/data/
+/release-test/data/
+/public/driver-mobile/
+# Transpiled bridge modules (source TypeScript and packaging scripts are tracked)
+/release-test/app/lib/
+/release-test/app/route.mjs
+/DispatchPro-Site-Bridge/app/lib/
+/DispatchPro-Site-Bridge/app/route.mjs
+/DispatchPro-Office-Bridge-FINAL/app/lib/
+/DispatchPro-Office-Bridge-FINAL/app/route.mjs

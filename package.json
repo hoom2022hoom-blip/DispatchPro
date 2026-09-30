@@ -3,13 +3,18 @@
   "version": "0.1.0",
   "private": "true",
   "scripts": {
-    "dev": "next dev --turbopack -p 9005",
+    "reception:worker": "node scripts/reception-worker.mjs",
+    "dev": "next dev --turbopack -H 127.0.0.1 -p 9005",
     "genkit:dev": "genkit start -- tsx src/ai/dev.ts",
     "genkit:watch": "genkit start -- tsx --watch src/ai/dev.ts",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -H 127.0.0.1",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test --test-concurrency=2 tests/*.test.mjs",
+    "test:smoke": "node --experimental-strip-types tests/http-smoke.mjs",
+    "call:send": "node scripts/send-call.mjs",
+    "call:icall": "node scripts/icall-udp-adapter.mjs"
   },
   "dependencies": {
     "@genkit-ai/googleai": "^1.17.0",
@@ -49,10 +54,12 @@
     "firebase-admin": "^12.2.0",
     "genkit": "^1.14.1",
     "lucide-react": "^0.475.0",
+    "maplibre-gl": "^4.7.1",
     "next": "^15.5.4",
     "next-pwa": "^5.6.0",
     "nodemailer": "^6.9.14",
     "react": "^18.3.1",
+    "react-day-picker": "^8.10.1",
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.52.1",
     "react-map-gl": "^7.1.7",
@@ -69,8 +76,10 @@
     "@types/react": "^18.3.3",
     "@types/react-day-picker": "^5.2.1",
     "@types/react-dom": "^18.3.0",
+    "fake-indexeddb": "^6.2.5",
     "genkit-cli": "^1.17.0",
     "postcss": "^8.4.39",
+    "react-test-renderer": "^18.3.1",
     "tailwindcss": "^3.4.4",
     "typescript": "^5.5.3"
   }

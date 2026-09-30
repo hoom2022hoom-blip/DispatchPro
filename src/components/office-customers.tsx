@@ -1,0 +1,34 @@
+"use client";
+import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { apiReceptionBackend as api } from '@/lib/reception-api';
+import type { ApiCustomer, CustomerPlace } from '@/lib/customer-places';
+import { matchesCustomer } from '@/lib/customer-places';
+import { CustomerPlacesMap } from './customer-places-map';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { useOffice } from './office-workspace';
+
+type Tab = 'profile'|'addresses'|'map'|'rides';
+export function OfficeCustomers({mapOnly=false}:{mapOnly?:boolean}) {
+ const router=useRouter();const {data}=useOffice();const [customers,setCustomers]=useState<ApiCustomer[]>([]);const [places,setPlaces]=useState<CustomerPlace[]>([]);const [selected,setSelected]=useState<ApiCustomer|null>(null);const [query,setQuery]=useState('');const [tab,setTab]=useState<Tab>(mapOnly?'map':'profile');const [draft,setDraft]=useState<ApiCustomer>({id:'',fullName:'',phone:'',secondaryPhone:'',notes:'',isActive:true});const [error,setError]=useState('');const [busy,setBusy]=useState(false);
+ const reload=async()=>{const [cs,ps]=await Promise.all([api.customers(),api.places()]);setCustomers(cs);setPlaces(ps);};
+ useEffect(()=>{void reload().catch(e=>setError((e as Error).message));},[]);
+ const filtered=useMemo(()=>customers.filter(c=>matchesCustomer(`${c.fullName} ${c.secondaryPhone??''}`,`${c.phone} ${c.secondaryPhone??''}`,query)||places.some(p=>p.address.customerId===c.id&&matchesCustomer(`${p.address.neighborhood} ${p.address.street}`,p.phone,query))),[customers,places,query]);
+ const choose=(c:ApiCustomer)=>{setSelected(c);setDraft({...c});setTab('profile');};
+ const save=async(e:React.FormEvent)=>{e.preventDefault();setBusy(true);setError('');try{const row=draft.id?await api.saveCustomer(draft):await api.createCustomer(draft.fullName,draft.phone,draft);await reload();choose(row);}catch(x){setError((x as Error).message);}finally{setBusy(false);}};
+ const createRequest=(place?:CustomerPlace)=>{const q=new URLSearchParams();if(selected)q.set('customerId',selected.id);if(place)q.set('addressId',place.address.id);router.push(`/office/orders?${q.toString()}`);};
+ const customerPlaces=places.filter(p=>p.address.customerId===selected?.id);
+ const rides=data?.reception.rides.filter(r=>r.customerId===selected?.id||r.passengerPhone===selected?.phone)??[];
+ return <div dir="rtl" className="space-y-4 p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><h1 className="text-2xl font-bold">{mapOnly?'خريطة العملاء':'العملاء'}</h1><p className="text-sm text-slate-500">ملفات العملاء وعناوينهم المحفوظة</p></div>{!mapOnly&&<Button onClick={()=>{setSelected(null);setDraft({id:'',fullName:'',phone:'',secondaryPhone:'',notes:'',isActive:true});setTab('profile');}}>إضافة عميل</Button>}</div>
+ {error&&<p role="alert" className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
+ {!mapOnly&&<div className="grid gap-4 xl:grid-cols-[280px_1fr]"><aside className="space-y-2 rounded-xl border bg-white p-3"><Input aria-label="بحث العملاء" placeholder="الاسم أو الهاتف أو الحي أو الشارع" value={query} onChange={e=>setQuery(e.target.value)}/><div className="max-h-[65vh] space-y-1 overflow-auto">{filtered.map(c=><button key={c.id} onClick={()=>choose(c)} className={`w-full rounded-lg p-3 text-right hover:bg-slate-50 ${selected?.id===c.id?'bg-primary/10':''}`}><b className="block">{c.fullName}</b><bdi className="text-sm text-slate-500">{c.phone}</bdi></button>)}</div></aside>
+ <section className="min-w-0 rounded-xl border bg-white p-4">{selected&&<div className="mb-4 flex flex-wrap gap-2 border-b pb-3">{([['profile','بيانات العميل'],['addresses','العناوين'],['map','الخريطة'],['rides','الطلبات السابقة']] as [Tab,string][]).map(([key,label])=><Button key={key} variant={tab===key?'default':'outline'} onClick={()=>setTab(key)}>{label}</Button>)}<Button className="mr-auto" onClick={()=>createRequest()}>إنشاء طلب</Button></div>}
+ {(!selected||tab==='profile')&&<form onSubmit={save} className="grid max-w-3xl grid-cols-1 gap-3 md:grid-cols-2"><h2 className="md:col-span-2 text-lg font-bold">{selected?'ملف العميل':'عميل جديد'}</h2><label className="space-y-1 text-sm">الاسم<Input required value={draft.fullName} onChange={e=>setDraft({...draft,fullName:e.target.value})}/></label><label className="space-y-1 text-sm">الهاتف<Input required dir="ltr" value={draft.phone} onChange={e=>setDraft({...draft,phone:e.target.value})}/></label><label className="space-y-1 text-sm">هاتف إضافي (اختياري)<Input dir="ltr" value={draft.secondaryPhone??''} onChange={e=>setDraft({...draft,secondaryPhone:e.target.value})}/></label><label className="space-y-1 text-sm md:col-span-2">ملاحظات<textarea className="min-h-20 w-full rounded-md border p-2" value={draft.notes??''} onChange={e=>setDraft({...draft,notes:e.target.value})}/></label><label className="flex items-center gap-2"><input type="checkbox" checked={draft.isActive!==false} onChange={e=>setDraft({...draft,isActive:e.target.checked})}/>نشط</label><div><Button disabled={busy}>{busy?'جارٍ الحفظ…':selected?'حفظ بيانات العميل':'إضافة العميل'}</Button>{selected&&<span className="mr-3 text-xs text-slate-500">أُنشئ {selected.createdAt?new Date(selected.createdAt).toLocaleDateString('ar'):'—'}</span>}</div></form>}
+ {selected&&tab==='addresses'&&<div className="space-y-3"><h2 className="font-bold">عناوين {selected.fullName}</h2>{customerPlaces.length?customerPlaces.map(p=><article key={p.address.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3"><div><b>{p.address.label}{p.address.isDefault?' · افتراضي':''}</b><p>{p.address.addressText||'عنوان دون وصف نصي'}</p><small className="text-slate-500">{p.address.neighborhood} {p.address.street} · {p.address.latitude??'—'}, {p.address.longitude??'—'}</small></div><Button variant="outline" onClick={()=>createRequest(p)}>إنشاء طلب من هذا العنوان</Button></article>):<p className="text-slate-500">لا توجد عناوين محفوظة.</p>}<Button variant="outline" onClick={()=>setTab('map')}>إضافة أو تعديل العناوين على الخريطة</Button></div>}
+ {tab==='map'&&<CustomerPlacesMap customerId={selected?.id} initialSearch={selected?.fullName??''} onRequest={place=>createRequest(place)} />}
+ {selected&&tab==='rides'&&<div><h2 className="mb-3 font-bold">الطلبات السابقة</h2>{rides.length?rides.map(r=><div key={r.id} className="border-b p-3">#{r.orderNumber??'—'} · {new Date(r.createdAt).toLocaleString('ar')} · {r.pickup.name}</div>):<p className="text-slate-500">لا توجد طلبات سابقة ظاهرة لهذا العميل.</p>}</div>}
+ </section></div>}
+ {mapOnly&&<CustomerPlacesMap onRequest={place=>{const q=new URLSearchParams({customerId:place.address.customerId,addressId:place.address.id});router.push(`/office/orders?${q.toString()}`);}}/>}
+ </div>;
+}

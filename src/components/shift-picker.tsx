@@ -20,7 +20,7 @@ export function ShiftPicker({ value, onChange, choices, disabled = false, select
     catch (failure) { setError(failure instanceof Error ? failure.message : 'تعذر تعيين السائق'); }
     finally { setPending(false); }
   }
-  return <Popover open={open} onOpenChange={setOpen}>
+  return <Popover open={open} onOpenChange={value=>{setOpen(value);if(value)setSearch('');}}>
     <PopoverTrigger asChild><Button type="button" variant="outline" disabled={disabled || pending} style={fontSize?{fontSize}:undefined} title={choices.find(choice=>choice.id===value)?.label??selectedLabel} className="w-full justify-start text-right" aria-label="اختيار السائق">{choices.find(choice => choice.id === value)?.label ?? selectedLabel ?? (value ? 'التعيين الحالي' : 'اختر السائق')}{changeLabel&&<span className="mr-2 font-semibold text-primary">{changeLabel}</span>}</Button></PopoverTrigger>
     <PopoverContent dir="rtl" className="w-80 space-y-2" onDoubleClick={event => event.stopPropagation()}>
       <Input aria-label="بحث السائق والسيارة" placeholder="ابحث بالاسم أو الهاتف أو اللوحة" value={search} onChange={event => setSearch(event.target.value)} />

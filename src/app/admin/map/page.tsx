@@ -11,6 +11,7 @@ import { db } from '@/lib/firebase';
 import { collection, onSnapshot, query, where, Timestamp } from 'firebase/firestore';
 import dynamic from 'next/dynamic';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ApiReception } from '@/components/api-reception';
 
 const DynamicTraccarMapView = dynamic(
   () => import('../../../components/TraccarMapView').then((mod) => mod.TraccarMapView),
@@ -30,6 +31,9 @@ const DynamicMapView = dynamic(
 
 
 export default function MapPage() {
+    return process.env.NEXT_PUBLIC_RECEPTION_BACKEND === 'api' ? <ApiReception initialShowPlaces /> : <LegacyMapPage />;
+}
+function LegacyMapPage() {
     const { user, loading: authLoading, hasRole } = useAuth();
     const router = useRouter();
     
@@ -54,7 +58,7 @@ export default function MapPage() {
 
       const toDate = (ts: any) => ts instanceof Timestamp ? ts.toDate() : ts;
       
-      const ridesQuery = query(collection(db, "rides"), where("status", "in", ["pending", "assigned", "in-progress"]));
+      const ridesQuery = query(collection(db, "rides"), where("status", "in", ["pending", "waiting", "assigned", "driver-accepted", "driver-arriving", "arrived", "in-progress"]));
       const driversQuery = query(collection(db, "drivers"));
 
       let ridesLoaded = false;

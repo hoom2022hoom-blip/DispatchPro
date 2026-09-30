@@ -1,0 +1,10 @@
+Office Calls Receiver 2.5
+
+- Uses eventId as the primary and only call identity.
+- Repeated delivery of the same eventId is acknowledged but not sent to GRIDCMS again.
+- A different eventId is always accepted, even for the same phone number within seconds.
+- Old eventId records are removed after 10 minutes and memory is capped at 2,000 IDs.
+- No phone-number cooldown or 60-second phone blocking is used.
+- TCP port 5050 and the captured GRIDCMS UDP 3520 protocol are unchanged.
+- W appears in the Office Calls history as the WhatsApp source marker.
+- GRIDCMS uses the dedicated valid line L=4 for WhatsApp because the device supports four lines and its L field does not accept letters.

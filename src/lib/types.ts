@@ -1,6 +1,6 @@
 
 
-export type RideStatus = 'pending' | 'assigned' | 'in-progress' | 'completed' | 'cancelled';
+export type RideStatus = 'pending' | 'waiting' | 'assigned' | 'driver-accepted' | 'driver-arriving' | 'arrived' | 'in-progress' | 'completed' | 'cancelled';
 
 export type DriverStatus = 'available' | 'on-shift' | 'offline';
 
@@ -53,6 +53,7 @@ export type AppUser = {
     name: string | null;
     displayName?: string | null; // Keep for firebase compatibility, but prefer `name`
     phoneNumber?: string | null;
+    defaultAddress?: string | Location;
     role: Role;
     photoURL?: string | null;
     createdAt?: Date;
@@ -119,9 +120,32 @@ export type MaintenanceTicket = {
 export type RideTag = 'UNPAID';
 
 export type Ride = {
+  rideRequestId?: string;
+  customerId?: string;
+  savedAddressId?: string | null;
+  addressText?: string;
+  neighborhood?: string;
+  street?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  locationSource?: import('./customer-places').LocationSource;
+  receptionVersion?: number;
   id: string;
+  callEventId?: string;
+  callTimestamp?: string;
+  receptionPending?: boolean;
+  orderDay?: string;
+  orderNumber?: number;
+  source?: 'WHATSAPP' | 'LANDLINE_ICALL' | 'MANUAL' | 'CUSTOMER_APP';
   pickup: Location;
   totalFare: number;
+  passengerName?: string;
+  addressStatus?: 'default' | 'variable';
+  addressType?: 'FIXED' | 'VARIABLE';
+  dispatchStatus?: import('./office-dispatch').DispatchStatus;
+  rideStatus?: 'REQUESTED'|'SEARCHING_DRIVER'|'DRIVER_ASSIGNED'|'DRIVER_ARRIVING'|'DRIVER_ARRIVED'|'IN_PROGRESS'|'COMPLETED'|'CANCELLED'|'NO_DRIVER_AVAILABLE';
+  dispatchMode?: 'MANUAL'|'AUTO_NEAREST'|'HYBRID';
+  lastDispatchOutcome?: string | null;
   passengerPhone?: string;
   dropoff?: Location;
   stops?: Location[];
