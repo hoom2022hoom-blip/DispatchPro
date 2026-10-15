@@ -4,8 +4,8 @@ export type OfficeDriver = { id: string; fullName: string; phone: string; phoneL
 export type VehicleAssignment = { id: string; driverId: string; vehicleId: string; startedAt: string; endedAt: string | null; changedBy: string | null; notes: string; plate: string; make: string; model: string };
 export type QueueLocation = { id: string; name: string; isActive: boolean; sortOrder: number };
 export type DriverQueueMutation = { type: 'add' | 'transfer' | 'remove' | 'up' | 'down' | 'move'; driverId: string; queueLocationId: string | null; beforeDriverId?: string; vehicleId?: string; confirmTransfer?: boolean; fromLocationId?: string | null };
-export type OfficeVehicle = { id: string; driverId: string; vehicleClassId: string; plate: string; make: string; model: string; color: string; year: number | null; active: boolean; status: 'ACTIVE' | 'MAINTENANCE' | 'OFFLINE' };
-export type OfficeData = { today: string; officeWhatsAppNumber: string; drivers: OfficeDriver[]; vehicles: OfficeVehicle[]; classes: { id: string; name: string }[]; reception: ReceptionSnapshot; calls: CallEvent[] };
+export type OfficeVehicle = { id: string; driverId: string; vehicleClassId: string; plate: string; make: string; model: string; color: string; year: number | null; registrationExpiryDate?: string | null; insuranceExpiryDate?: string | null; active: boolean; status: 'ACTIVE' | 'MAINTENANCE' | 'OFFLINE' };
+export type OfficeData = { currentUser?:{username:string}; today: string; officeWhatsAppNumber: string; driverEligibility?: DriverEligibility[]; drivers: OfficeDriver[]; vehicles: OfficeVehicle[]; classes: { id: string; name: string }[]; reception: ReceptionSnapshot; calls: CallEvent[] };
 export const liveRideStatuses = ['assigned','driver-accepted','driver-arriving','arrived','in-progress'];
 export function officeDriverStatus(driver: OfficeDriver, data: OfficeData) {
   if (driver.status === 'Suspended') return 'SUSPENDED';
@@ -23,3 +23,6 @@ export function officeMetrics(data: OfficeData) {
  available: data.drivers.filter(d => officeDriverStatus(d,data)==='AVAILABLE').length, busy: data.drivers.filter(d => officeDriverStatus(d,data)==='BUSY').length,
  vehicles: data.vehicles.length, completed: today.filter(r=>r.status==='completed').length};
 }
+
+export type DriverEligibility={driverId:string;username:string|null;accountActive:boolean;online:boolean;available:boolean;vehicleReady:boolean;locationStatus:string;locationUpdatedAt:string|null;locationAccuracy:number|null;driverConnection?:{connected:boolean;lastSeenAt:string|null};radioConnection?:{connected:boolean;lastSeenAt:string|null};voiceState?:{connected:boolean;talking:boolean;channels:string[]};eligible:boolean;reasons:string[]};
+export const eligibilityLabels:Record<string,string>={DRIVER_APP_DISABLED:'تطبيق السائق موقوف',INACTIVE:'السائق معطّل',ACCOUNT_DISABLED:'حساب التطبيق معطّل',OFFLINE:'غير متصل / غير متاح',BUSY:'مشغول',NO_LOCATION:'GPS غير موجود',STALE_LOCATION:'الموقع قديم',POOR_ACCURACY:'دقة GPS غير كافية',NO_LINKED_VEHICLE:'لا توجد سيارة مرتبطة',NO_READY_VEHICLE:'السيارة غير جاهزة',ACTIVE_ORDER:'مشغول برحلة'};

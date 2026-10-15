@@ -18,6 +18,8 @@ test('reception resolves a customer outside the initial list and submits the sel
   assert.deepEqual(calls,['0591234567']);assert.equal(renderer.root.find(n=>n.type==='input'&&n.props.name==='passengerName').props.value,customer.fullName);
   assert.equal(renderer.root.findByProps({'aria-label':'عنوان العميل المحفوظ'}).findAllByType('option').length,3);
   await act(async()=>renderer.root.findByProps({'aria-label':'عنوان العميل المحفوظ'}).props.onChange({target:{value:'second'}}));
+  const {OfficeOrderDestination}=await import('../src/components/office-order-destination.tsx');
+  await act(async()=>renderer.root.findAllByType(OfficeOrderDestination).find(n=>n.props.target!=='pickup').props.onChange('وجهة الاختبار'));
   await act(async()=>renderer.root.findByType('form').props.onSubmit({preventDefault(){},persist(){}}));
   assert.equal(saved.length,1);assert.equal(saved[0].customerId,customer.id);assert.equal(saved[0].savedAddressId,'second');assert.equal(saved[0].pickup.name,'عنوان second');
  }finally{await act(async()=>renderer?.unmount());}

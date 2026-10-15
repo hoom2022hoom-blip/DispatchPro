@@ -5,7 +5,9 @@ import withPWA from 'next-pwa';
 const isDevelopment = process.env.NODE_ENV === 'development';
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Allow validation builds without replacing the running development output.
+  distDir: process.env.NEXT_DIST_DIR || '.next',
+  ...(process.env.DISPATCHPRO_VERIFY_BUILD === '1' ? {experimental: {cpus: 2}} : {}),
   typescript: {
     ignoreBuildErrors: false,
   },
@@ -13,7 +15,7 @@ const nextConfig: NextConfig = {
     ignoreDuringBuilds: true,
   },
   // Allow cross-origin requests from our domain in development
-  allowedDevOrigins: ['dispatchpro.jajliardo.com'],
+  allowedDevOrigins: ['dispatchpro.jajliardo.com', 'office.nablustaxi.com'],
   images: {
     remotePatterns: [
       {
@@ -38,7 +40,7 @@ const pwaConfig = {
     { urlPattern: /\/api\/(?:customer\/|reception\/|calls(?:\?|$))/, handler: 'NetworkOnly', method: 'GET' },
     ...require('next-pwa/cache'),
   ],
-  dest: 'public',
+  dest: process.env.NEXT_PWA_DEST || 'public',
   register: !isDevelopment,
   skipWaiting: !isDevelopment,
   disable: isDevelopment,

@@ -66,7 +66,7 @@ public sealed class DriverQueueTests
             Assert.Equal(entered,(await Entries())[0]!["enteredAt"]!.GetValue<string>());
             Assert.Equal(HttpStatusCode.Conflict,(await a.PutAsJsonAsync("/api/v1/office/queue-locations/"+one,new{name="موقع تجريبي أول",isActive=false,sortOrder=0})).StatusCode);
             // Real request assignment keeps queue metadata intact, with BUSY display.
-            var ride=await Body(await a.PostAsJsonAsync("/api/v1/ride-requests",new{source="MANUAL",location=new{addressText="عنوان يدوي",locationSource="MANUAL_TEXT"}}));
+            var ride=await Body(await a.PostAsJsonAsync("/api/v1/ride-requests",new{source="MANUAL",destination="الجامعة",location=new{addressText="عنوان يدوي",locationSource="MANUAL_TEXT"}}));
             state=await Body(await a.GetAsync("/api/v1/office"));var requestRow=state["reception"]!["rides"]!.AsArray().Single(r=>r!["rideRequestId"]!.GetValue<string>()==ride["rideRequestId"]!.GetValue<string>())!.DeepClone().AsObject();var firstQueue=state["reception"]!["queue"]!.AsArray().Single(q=>q!["driverId"]!.GetValue<string>()==firstId)!;
             requestRow["driverId"]=firstId;requestRow["shiftId"]=null;requestRow["status"]="assigned";
             requestRow["status"]="pending";requestRow["dispatchStatus"]="PENDING";requestRow["addressText"]="عنوان متغير يدوي";requestRow["addressType"]="VARIABLE";
@@ -77,30 +77,34 @@ public sealed class DriverQueueTests
             var busyQueuedEntry=rows.Single(r=>r!["driverId"]!.GetValue<string>()==firstId)!;var busyPosition=busyQueuedEntry["position"]!.GetValue<int>();var busyEnteredAt=busyQueuedEntry["enteredAt"]!.GetValue<string>();
             Assert.Equal(HttpStatusCode.OK,(await Queue("transfer",firstId,two,true,one)).StatusCode);var transferred=(await Entries()).Single(r=>r!["driverId"]!.GetValue<string>()==firstId)!;
             Assert.Equal(two,transferred["queueLocationId"]!.GetValue<string>());Assert.Equal(busyPosition,transferred["position"]!.GetValue<int>());Assert.Equal(busyEnteredAt,transferred["enteredAt"]!.GetValue<string>());
-            foreach(var (dispatch,status) in new[]{("REJECTED","waiting"),("PENDING","pending"),("SENT","assigned"),("ACCEPTED","driver-accepted"),("ARRIVED","arrived"),("STARTED","in-progress"),("COMPLETED","completed")}) {
-                requestRow["dispatchStatus"]=dispatch;requestRow["status"]=status;
+            foreach(var (dispatch,status) in new[]{("REJECTED","waiting"),("SENT","assigned"),("ACCEPTED","driver-accepted"),("ARRIVED","arrived"),("STARTED","in-progress"),("COMPLETED","completed")}) {
+                requestRow["dispatchStatus"]=dispatch;requestRow["status"]=status;if(status=="completed")requestRow["totalFare"]=30;
                 requestRow=await Body(await a.PutAsJsonAsync("/api/v1/reception/rides/"+Id(requestRow),requestRow));Assert.Equal(dispatch,requestRow["dispatchStatus"]!.GetValue<string>());
             }
             using(var auditScope=factory.Services.CreateScope()) {
                 var auditDb=auditScope.ServiceProvider.GetRequiredService<TaxiDb>();var context=auditScope.ServiceProvider.GetRequiredService<TenantContext>();
                 context.TenantId=(await auditDb.Set<Tenant>().SingleAsync(t=>t.Slug=="queue-a")).Id;
                 var log=await auditDb.Set<AuditLog>().Where(l=>l.Action=="reception.status-changed").OrderBy(l=>l.CreatedAt).ToListAsync();
-                Assert.Equal(8,log.Count);Assert.All(log,l=>{Assert.NotEqual(Guid.Empty,l.ActorId);Assert.True(l.CreatedAt>DateTimeOffset.UtcNow.AddMinutes(-5));Assert.NotNull(JsonNode.Parse(l.Detail)!["previous"]);Assert.NotNull(JsonNode.Parse(l.Detail)!["next"]);});
+                Assert.Equal(7,log.Count);Assert.All(log,l=>{Assert.NotEqual(Guid.Empty,l.ActorId);Assert.True(l.CreatedAt>DateTimeOffset.UtcNow.AddMinutes(-5));Assert.NotNull(JsonNode.Parse(l.Detail)!["previous"]);Assert.NotNull(JsonNode.Parse(l.Detail)!["next"]);});
                 context.TenantId=(await auditDb.Set<Tenant>().SingleAsync(t=>t.Slug=="queue-b")).Id;Assert.Empty(await auditDb.Set<AuditLog>().Where(l=>l.Action=="reception.status-changed").ToListAsync());
             }
             foreach(var phase in new[]{"pending","waiting","assigned","driver-accepted","arrived","in-progress"}) {
-                var created=await Body(await a.PostAsJsonAsync("/api/v1/ride-requests",new{source="MANUAL",location=new{addressText="reassignment test",locationSource="MANUAL_TEXT"}}));
+                var created=await Body(await a.PostAsJsonAsync("/api/v1/ride-requests",new{source="MANUAL",destination="الجامعة",location=new{addressText="reassignment test",locationSource="MANUAL_TEXT"}}));
                 var snap=await Body(await a.GetAsync("/api/v1/office"));
                 var item=snap["reception"]!["rides"]!.AsArray().Single(r=>r!["rideRequestId"]!.GetValue<string>()==created["rideRequestId"]!.GetValue<string>())!.DeepClone().AsObject();
-                item["driverId"]=firstId;item["status"]=phase;item.Remove("dispatchStatus");if(phase=="waiting")item["dispatchStatus"]="REJECTED";
-                item=await Body(await a.PutAsJsonAsync("/api/v1/reception/rides/"+Id(item),item));
+                item["driverId"]=firstId;
+                var stages=phase switch { "pending"=>new[]{"pending"}, "waiting"=>new[]{"assigned","waiting"}, "assigned"=>new[]{"assigned"}, "driver-accepted"=>new[]{"assigned","driver-accepted"}, "arrived"=>new[]{"assigned","driver-accepted","arrived"}, _=>new[]{"assigned","driver-accepted","arrived","in-progress"} };
+                foreach(var stage in stages) {
+                    item["status"]=stage;item.Remove("dispatchStatus");if(stage=="waiting")item["dispatchStatus"]="REJECTED";
+                    item=await Body(await a.PutAsJsonAsync("/api/v1/reception/rides/"+Id(item),item));
+                }
                 var positions=(await Entries()).Select(q=>(q!["driverId"]!.ToString(),q["position"]!.ToString(),q["enteredAt"]!.ToString())).ToArray();
                 item["driverId"]=secondId;var retry=item.DeepClone();
                 item=await Body(await a.PutAsJsonAsync("/api/v1/reception/rides/"+Id(item),item));
                 Assert.Equal(secondId,item["driverId"]!.ToString());Assert.Equal("PENDING",item["dispatchStatus"]!.ToString());Assert.Equal("pending",item["status"]!.ToString());
                 Assert.True(JsonNode.DeepEquals(item,await Body(await a.PutAsJsonAsync("/api/v1/reception/rides/"+Id(item),retry))));
                 Assert.Equal(positions,(await Entries()).Select(q=>(q!["driverId"]!.ToString(),q["position"]!.ToString(),q["enteredAt"]!.ToString())).ToArray());
-                item["status"]=phase=="pending"?"cancelled":"completed";item.Remove("dispatchStatus");
+                item["status"]="cancelled";item.Remove("dispatchStatus");
                 item=await Body(await a.PutAsJsonAsync("/api/v1/reception/rides/"+Id(item),item));item["driverId"]=firstId;
                 Assert.Equal(HttpStatusCode.Conflict,(await a.PutAsJsonAsync("/api/v1/reception/rides/"+Id(item),item)).StatusCode);
             }
@@ -120,13 +124,20 @@ public sealed class DriverQueueTests
         var cs=Environment.GetEnvironmentVariable("TAXI_TEST_POSTGRES")!;await using var admin=new NpgsqlConnection(cs);await admin.OpenAsync();var database="taxi_test_"+Guid.NewGuid().ToString("N");await using(var c=new NpgsqlCommand($"CREATE DATABASE {database}",admin))await c.ExecuteNonQueryAsync();
         try {
             await using var factory=new ApiFactory(new NpgsqlConnectionStringBuilder(cs){Database=database}.ConnectionString);using var scope=factory.Services.CreateScope();var db=scope.ServiceProvider.GetRequiredService<TaxiDb>();var tenant=scope.ServiceProvider.GetRequiredService<TenantContext>();
-            await db.Database.MigrateAsync();await Seed.RunAsync(db,tenant,SeedConfig("upgrade"));await db.GetService<IMigrator>().MigrateAsync("20260927151823_OfficeFleetBasics");db.ChangeTracker.Clear();var user=await db.Set<User>().SingleAsync();var vehicleClass=await db.Set<VehicleClass>().FirstAsync();
+            await db.GetService<IMigrator>().MigrateAsync("20260927151823_OfficeFleetBasics");
+            // Seed the historical schema directly; the current seed includes later columns.
+            tenant.TenantId=Guid.NewGuid();var roleId=Guid.NewGuid();var userId=Guid.NewGuid();var classId=Guid.NewGuid();
+            await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO \"Tenant\" (\"Id\",\"Slug\",\"Name\") VALUES ({tenant.TenantId},{"upgrade"},{"Upgrade fixture"})");
+            await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO \"Role\" (\"Id\",\"TenantId\",\"Name\") VALUES ({roleId},{tenant.TenantId},{"Driver"})");
+            await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO \"User\" (\"Id\",\"TenantId\",\"Username\",\"PasswordHash\",\"RoleId\",\"Active\") VALUES ({userId},{tenant.TenantId},{"old-driver"},{"historical-test-hash"},{roleId},{true})");
+            await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO \"VehicleClass\" (\"Id\",\"TenantId\",\"Name\",\"Multiplier\") VALUES ({classId},{tenant.TenantId},{"Standard"},{1m})");
+            db.ChangeTracker.Clear();var user=await db.Set<User>().SingleAsync();var vehicleClass=await db.Set<VehicleClass>().FirstAsync();
             var d=Guid.NewGuid();var v=Guid.NewGuid();var s=Guid.NewGuid();var q=Guid.NewGuid();var at=DateTimeOffset.Parse("2026-09-20T10:00:00Z");
             await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO \"Driver\" (\"Id\",\"TenantId\",\"UserId\",\"FullName\",\"Status\",\"Phone\",\"Active\") VALUES ({d},{tenant.TenantId},{user.Id},{"old driver"},{1},{"+972591111111"},{true})");
             await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO \"Vehicle\" (\"Id\",\"TenantId\",\"DriverId\",\"VehicleClassId\",\"Plate\",\"Make\",\"Model\",\"Color\",\"Status\",\"Active\") VALUES ({v},{tenant.TenantId},{d},{vehicleClass.Id},{"OLD-1"},{"Kia"},{"Niro"},{"White"},{"ACTIVE"},{true})");
             await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO \"ReceptionShift\" (\"Id\",\"TenantId\",\"DriverId\",\"VehicleId\",\"Active\",\"StartTime\") VALUES ({s},{tenant.TenantId},{d},{v},{true},{at})");
             await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO \"ReceptionQueue\" (\"Id\",\"TenantId\",\"ShiftId\",\"Position\",\"JoinedAt\") VALUES ({q},{tenant.TenantId},{s},{0},{at})");
-            await db.Database.MigrateAsync();db.ChangeTracker.Clear();var entry=await db.Set<ReceptionQueue>().SingleAsync();Assert.Equal(d,entry.DriverId);Assert.Equal(at,entry.JoinedAt);Assert.Equal(1,entry.Position);Assert.NotNull(entry.QueueLocationId);Assert.Equal(v,(await db.Set<Driver>().SingleAsync()).CurrentVehicleId);Assert.Single(await db.Set<DriverVehicleAssignment>().ToListAsync()); Assert.Equal("0591111111",(await db.Set<Driver>().SingleAsync()).PhoneLocal); Assert.Equal("+972",(await db.Set<Driver>().SingleAsync()).WhatsappCountryCode);
+            await db.Database.MigrateAsync();db.ChangeTracker.Clear();var entry=await db.Set<ReceptionQueue>().SingleAsync();Assert.Equal(d,entry.DriverId);Assert.Equal(at,entry.JoinedAt);Assert.Equal(1,entry.Position);Assert.NotNull(entry.QueueLocationId);Assert.Equal(v,(await db.Set<Driver>().SingleAsync()).CurrentVehicleId);Assert.Single(await db.Set<DriverVehicleAssignment>().ToListAsync()); Assert.Equal("0591111111",(await db.Set<Driver>().SingleAsync()).PhoneLocal); Assert.Equal("+972",(await db.Set<Driver>().SingleAsync()).WhatsappCountryCode); Assert.True((await db.Set<Driver>().SingleAsync()).DriverAppEnabled); Assert.True((await db.Set<Driver>().SingleAsync()).GpsEnabled);
         } finally{NpgsqlConnection.ClearAllPools();await using var drop=new NpgsqlCommand($"DROP DATABASE {database} WITH (FORCE)",admin);await drop.ExecuteNonQueryAsync();}
     }
 }

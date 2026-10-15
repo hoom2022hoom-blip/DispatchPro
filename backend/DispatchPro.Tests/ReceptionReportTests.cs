@@ -35,7 +35,7 @@ public sealed class ReceptionReportTests
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer",login["accessToken"]!.GetValue<string>());
             var driver = await Read(await client.PostAsJsonAsync("/api/v1/office/drivers",new {fullName="سائق التقرير",phone="0591234567",active=true,status="Available"}));
             var customer = await Read(await client.PostAsJsonAsync("/api/v1/customers",new {fullName="زبون التقرير",phone="0597654321"}));
-            JsonObject Order(string id, string phone, string person) => new() { ["id"]=id,["passengerName"]=person,["passengerPhone"]=phone,["pickup"]=new JsonObject { ["name"]="",["coords"]=new JsonObject { ["x"]=0,["y"]=0 } },["totalFare"]=0,["status"]="pending",["source"]="MANUAL" };
+            JsonObject Order(string id, string phone, string person) => new() { ["id"]=id,["passengerName"]=person,["passengerPhone"]=phone,["pickup"]=new JsonObject { ["name"]="",["coords"]=new JsonObject { ["x"]=0,["y"]=0 } },["dropoff"]=new JsonObject { ["name"]="الجامعة" },["totalFare"]=0,["status"]="pending",["source"]="MANUAL" };
             var landline = await Read(await client.PutAsJsonAsync("/api/v1/reception/rides/landline-test",Order("landline-test","0000","أرضي")));
             Assert.Equal("0000",landline["passengerPhone"]!.GetValue<string>()); Assert.Null(landline["customerId"]); Assert.Null(landline["driverId"]); Assert.Equal(1,landline["orderNumber"]!.GetValue<int>()); Assert.Equal("",landline["addressText"]!.GetValue<string>());
             var day = landline["orderDay"]!.GetValue<string>();
@@ -78,7 +78,7 @@ public sealed class ReceptionReportTests
             Assert.Equal("عنوان اختبار",(await Read(await client.PutAsJsonAsync("/api/v1/reception/rides/normal-address",normal)))["addressText"]!.GetValue<string>());
             var empty=Order("normal-empty","0590000000","طلب بدون عنوان");empty["driverId"]=driver["id"]!.DeepClone();empty["status"]="assigned";
             var sent=await Read(await client.PutAsJsonAsync("/api/v1/reception/rides/normal-empty",empty));Assert.Equal("",sent["addressText"]!.GetValue<string>());Assert.Equal("SENT",sent["dispatchStatus"]!.GetValue<string>());
-            await Read(await client.PostAsJsonAsync("/api/v1/ride-requests",new {source="MANUAL",pickup=""}));
+            await Read(await client.PostAsJsonAsync("/api/v1/ride-requests",new {source="MANUAL",pickup="",destination="الجامعة"}));
         } finally {
             NpgsqlConnection.ClearAllPools(); await using var drop=new NpgsqlCommand($"DROP DATABASE {name} WITH (FORCE)",admin); await drop.ExecuteNonQueryAsync();
         }

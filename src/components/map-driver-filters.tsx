@@ -1,0 +1,12 @@
+"use client";
+import {mapGpsFilters,operationFilters,type MapGpsFilter} from '@/lib/office-driver-map';
+export function MapDriverFilters({operation,gps,count,total,mapFiltered,onMapFiltered,onOperation,onGps,onReset}:{operation:string;gps:MapGpsFilter;count:number;total:number;mapFiltered:boolean;onMapFiltered:(value:boolean)=>void;onOperation:(value:string)=>void;onGps:(value:MapGpsFilter)=>void;onReset:()=>void}){
+ return <details className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-2" aria-label="خيارات تصفية السائقين">
+  <summary aria-label="فتح فلاتر السائقين" className="min-h-11 cursor-pointer content-center text-xs font-semibold text-slate-700">فلاتر السائقين <span role="status" aria-live="polite" className="mr-1 font-normal">{count} من {total}</span>{(operation!=='All'||gps!=='All')&&<span className="mr-1 text-blue-700">· مفعّلة</span>}</summary>
+  <div aria-label="تصفية السائقين" className="flex flex-wrap gap-1">{operationFilters.map(f=><button key={f.status} type="button" aria-pressed={operation===f.status} onClick={()=>onOperation(f.status)} className={`min-h-11 min-w-14 flex-1 rounded-lg px-1 text-xs focus-visible:ring-2 focus-visible:ring-blue-600 ${operation===f.status?'bg-blue-700 text-white':'border border-slate-200 bg-white text-slate-700'}`}>{f.status==='DriverArriving'?'متجه':f.label}</button>)}</div>
+  <label className="mt-2 flex min-h-11 items-center gap-2 text-xs">جودة الموقع<select aria-label="تصفية جودة GPS" value={gps} onChange={e=>onGps(e.target.value as MapGpsFilter)} className="min-h-11 min-w-0 flex-1 rounded-lg border bg-white px-2">{mapGpsFilters.map(f=><option key={f.value} value={f.value}>{f.label}</option>)}</select></label>
+  <label className="mt-1 flex min-h-11 cursor-pointer items-center gap-2 text-xs"><input type="checkbox" aria-label="تطبيق البحث والفلاتر على الخريطة" checked={mapFiltered} onChange={e=>onMapFiltered(e.target.checked)} className="h-5 w-5 accent-blue-700"/>تطبيق البحث والفلاتر على الخريطة</label>
+  <button type="button" className="mt-2 min-h-11 w-full rounded-lg border bg-white px-2 text-xs text-blue-700" onClick={e=>{onReset();const panel=e.currentTarget.closest('details');if(panel)panel.open=false;}}>مسح البحث والفلاتر</button>
+  <p className="mt-1 text-xs leading-5 text-slate-500">{mapFiltered?'تُعرض النتائج فقط؛ تبقى السيارة المحددة والمتحدث ظاهرتين إن توفر موقعهما.':'الفلاتر تخص القائمة؛ تبقى بقية السيارات على الخريطة.'}</p>
+ </details>;
+}

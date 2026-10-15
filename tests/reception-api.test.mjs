@@ -78,9 +78,9 @@ test('API provider uses the existing write contract, preserves versions and rest
     calls.push({ path, ...init });
     return path.endsWith('/auth/login') ? Response.json({ accessToken: 'employee' }) : Response.json({});
   });
-  await assert.rejects(() => provider.saveRide({ id: 'a' }), /الدخول/);
+  await assert.rejects(() => provider.saveRide({ id: 'a', pickup:{name:''} }), /الدخول/);
   await provider.login('office', 'user', 'password');
-  await provider.saveRide({ id: 'a', receptionVersion: 7 });
+  await provider.saveRide({ id: 'a', pickup:{name:''}, receptionVersion: 7 });
   assert.equal(calls[1].headers.Authorization, 'Bearer employee'); assert.equal(JSON.parse(calls[1].body).receptionVersion, 7);
   await provider.changeQueue({ type: 'move', shiftId: 'shift' }); assert.match(calls[2].path, /queue$/);
   await provider.ensureRideNumber({ id: 'a' }); assert.equal(calls.length, 3);

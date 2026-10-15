@@ -64,7 +64,7 @@ export function RideHistoryTable({ rides, drivers }: RideHistoryTableProps) {
             <TableCell>{getDriverName(ride.driverId)}</TableCell>
             <TableCell>{ride.pickup.name}</TableCell>
             <TableCell>{ride.dropoff?.name || 'Unknown'}</TableCell>
-            <TableCell>{formatCurrency(ride.totalFare)}</TableCell>
+            <TableCell>{formatCurrency(ride.totalFare ?? undefined)}</TableCell>
             <TableCell>{getPaymentSummary(ride)}</TableCell>
             <TableCell>
               {ride.completionTime ? format(ride.completionTime, 'PPpp') : 'N/A'}

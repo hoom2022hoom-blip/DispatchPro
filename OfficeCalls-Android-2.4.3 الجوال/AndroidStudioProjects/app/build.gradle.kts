@@ -15,8 +15,8 @@ android {
         applicationId = "com.maktab.calls"
         minSdk = 24
         targetSdk = 36
-        versionCode = 243
-        versionName = "2.4.3-dispatchpro"
+        versionCode = 325
+        versionName = "3.2.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -34,10 +34,25 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
+    }
+    testOptions { unitTests { isIncludeAndroidResources = true } }
+}
+
+// The Windows Robolectric native loader does not decode spaces in SDK jar URLs.
+// Validation can supply the existing Maven cache's short path without changing dependencies.
+tasks.withType<Test>().configureEach {
+    providers.environmentVariable("OFFICE_CALLS_TEST_MAVEN_REPO").orNull?.let {
+        systemProperty("maven.repo.local", it)
     }
 }
 
 dependencies {
+    implementation("com.googlecode.libphonenumber:libphonenumber:9.0.40")
+    implementation("com.google.zxing:core:3.5.3")
+    implementation("androidx.camera:camera-camera2:1.6.2")
+    implementation("androidx.camera:camera-lifecycle:1.6.2")
+    implementation("androidx.camera:camera-view:1.6.2")
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)
@@ -47,6 +62,8 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     testImplementation(libs.junit)
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    testImplementation("org.robolectric:robolectric:4.17")
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.espresso.core)

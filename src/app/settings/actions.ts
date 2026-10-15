@@ -2,6 +2,7 @@
 "use server";
 
 import 'dotenv/config';
+import { authorizeLegacyUser } from '@/lib/legacy-admin-authorization';
 import { z } from "zod";
 import { db } from '@/lib/firebase';
 import { doc, updateDoc, serverTimestamp, writeBatch, getDoc } from 'firebase/firestore';
@@ -16,6 +17,8 @@ const updateUserProfileSchema = z.object({
 });
 
 export async function updateUserProfile(prevState: any, formData: FormData) {
+    const actor = await authorizeLegacyUser();
+    if (!actor || formData.get('userId') !== actor.uid) return {type:'error',message:'Profile authorization required.'};
     const formValues = Object.fromEntries(formData.entries());
     const validatedFields = updateUserProfileSchema.safeParse(formValues);
 

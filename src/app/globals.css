@@ -4,25 +4,172 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Radio presentation only; all hold/release and floor decisions stay in PttButton/VoiceClient. */
+.radio-dock{width:264px;max-width:calc(100% - 24px);color:#f8fafc;pointer-events:auto}
+.office-radio-dock{position:absolute;left:12px;bottom:12px;z-index:35}
+.radio-speaker-strip{display:flex;align-items:center;gap:8px;min-height:52px;padding:8px 10px;border:1px solid #475569;border-radius:14px;background:#111827;box-shadow:0 4px 14px #0003;font-size:12px;line-height:1.4;color:#f8fafc}
+.radio-speaker-strip strong{font-size:13px;color:#f8fafc}
+.radio-speaker-strip>svg{flex:none;color:#94a3b8}
+.radio-speaker-strip[data-radio-phase=idle]>svg{color:#6ee7b7}
+.radio-speaker-strip[data-radio-phase=requesting]>svg{color:#fde047}
+.radio-speaker-strip[data-radio-phase=talking]>svg,.radio-speaker-strip[data-radio-phase=busy]>svg{color:#fca5a5}
+.radio-dial-row{display:flex;align-items:end;justify-content:space-between;gap:8px;margin-top:10px;direction:ltr}
+.radio-dials{display:flex;align-items:end;gap:12px;margin-top:8px}
+button.ptt-dial{display:flex;flex:none;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:0;touch-action:none;user-select:none;border:4px solid #242424;box-shadow:0 4px 0 #111827,0 8px 22px #0003;color:#111827!important;transition:transform 120ms ease,box-shadow 120ms ease;line-height:1.1;font-weight:800;border-radius:50%;padding:8px}
+button.ptt-dial-public{width:100px;height:100px;background:#facc15!important}
+button.ptt-dial-private{width:70px;height:70px;background:#e2e8f0!important;font-size:11px}
+button.ptt-dial span{font-size:12px}button.ptt-dial kbd{font-size:10px}
+button.ptt-dial:active:not(:disabled){transform:translateY(3px);box-shadow:0 1px 0 #111827,0 3px 10px #0002}
+button.ptt-dial[aria-pressed=true]{background:#fbbf24!important;box-shadow:0 0 0 4px #fef08a,0 4px 0 #111827}
+button.ptt-dial-private[aria-pressed=true]{background:#93c5fd!important}
+button.ptt-dial[aria-busy=true]:not([aria-pressed=true]){border-style:dashed}
+button.ptt-dial:disabled{opacity:.55;cursor:not-allowed}
+.radio-dock button.ptt-dial{touch-action:none}
+.radio-expand{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-width:48px;min-height:48px;border-radius:12px;background:#111827;color:#f8fafc;border:1px solid #475569;font-size:11px}
+.radio-details{position:absolute;left:0;bottom:100%;margin-bottom:10px;width:360px;max-width:calc(100vw - 24px);max-height:calc(100dvh - 360px);overflow-y:auto;overscroll-behavior:contain;padding:12px;border:1px solid var(--taxi-border,#cbd5e1);border-radius:16px;background:var(--taxi-card,#fff);color:var(--taxi-ink,#111827);box-shadow:0 8px 32px #0003}
+.driver-theme .driver-voice-bar.radio-dock{position:fixed;left:max(12px,env(safe-area-inset-left));bottom:max(12px,env(safe-area-inset-bottom));z-index:40;border:0;padding:0;background:transparent;box-shadow:none;width:240px}
+[data-driver-radio-target] .driver-voice-bar.radio-dock{position:relative;left:auto;right:auto;bottom:auto;max-width:calc(100vw - 24px)}
+[data-driver-radio-target]{width:240px;max-width:calc(100% - 24px)}
+.map-detail-drawer{bottom:190px;max-height:calc(100% - 340px)}
+@media(max-width:767px){[aria-label="دليل حالات السائقين"]{top:140px!important;bottom:auto!important;max-width:calc(100% - 24px)}}
+.radio-driver-settings{position:relative;margin-top:8px;border-radius:10px;background:#111827;padding:4px 10px;font-size:12px;color:#f8fafc}.radio-driver-settings summary{min-height:28px;cursor:pointer}
+.driver-map-summary{position:relative;z-index:20;background:var(--taxi-card,#fff);color:var(--taxi-ink,#111827);border-bottom:1px solid var(--taxi-border,#cbd5e1);font-size:14px}.driver-map-summary>summary{min-height:44px;padding:12px;cursor:pointer;font-weight:700}
+.journey-tool{display:flex;align-items:center;justify-content:center;min-height:44px;min-width:44px;border:1px solid var(--taxi-border,#cbd5e1);background:var(--taxi-card,#fff);color:var(--taxi-ink,#111827);border-radius:12px;box-shadow:0 2px 6px #0002}
+@media(max-width:767px){.map-driver-drawer,.map-detail-drawer{bottom:190px!important;max-height:calc(100% - 284px)!important}.map-detail-drawer{right:12px!important;left:auto!important;top:140px!important}.radio-dock{width:244px}.radio-details{max-height:calc(100dvh - 350px)}}
+@media(max-height:500px){.office-radio-dock{left:auto;right:12px;bottom:8px;width:230px}.radio-speaker-strip{min-height:44px;padding:5px 8px}.radio-speaker-strip strong{font-size:12px}button.ptt-dial-public{width:72px;height:72px}button.ptt-dial-public>svg{width:28px;height:28px}button.ptt-dial-private{width:56px;height:56px}.radio-dials,.radio-dial-row{margin-top:4px}.radio-details{left:auto;right:0;bottom:0;max-height:calc(100dvh - 110px);transform:translateX(-242px);width:min(320px,calc(100vw - 270px))}.map-driver-drawer,.map-detail-drawer{bottom:12px!important;right:254px!important;width:320px!important;max-width:calc(100% - 278px)!important;max-height:calc(100% - 100px)!important;top:88px!important}.driver-theme .driver-voice-bar.radio-dock{left:auto;right:12px;width:230px}}
+@media(prefers-reduced-motion:reduce){button.ptt-dial{transition:none}}
+
+/* Reference radio dock: yellow public dial and adjacent station/private strip. */
+.radio-dock{width:300px}.radio-reference-row{display:flex;align-items:center;gap:8px;direction:ltr}.radio-reference-info{min-width:0;flex:1;direction:rtl}.radio-reference-info .radio-speaker-strip{min-height:44px;padding:6px 9px;border-radius:22px;font-size:11px;line-height:1.35}.radio-reference-info .radio-speaker-strip strong{font-size:12px}.radio-reference-info .radio-speaker-strip>svg{width:15px;height:15px}
+.radio-private-row{display:flex;align-items:center;gap:6px;margin-top:5px;direction:ltr}.radio-target{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl;border-radius:18px;background:#152238;color:#f8fafc;min-height:44px;padding:8px;font-size:11px}.radio-private-row .radio-expand{min-width:44px;min-height:44px;border-radius:50%}
+button.ptt-dial-public{width:84px;height:84px;border-width:7px;background:#ffc400!important;box-shadow:0 2px 0 #0b1220,0 4px 14px #0005;position:relative}button.ptt-dial-public>svg{width:28px;height:28px}button.ptt-dial-public>span{font-size:10px}button.ptt-dial-public>kbd{position:absolute;bottom:3px;left:6px;font-size:8px}button.ptt-dial-private{width:48px;height:48px;border-width:3px;gap:0;background:#213149!important;color:#f8fafc!important;box-shadow:0 2px 8px #0003}button.ptt-dial-private>svg:first-child{width:12px;height:12px}button.ptt-dial-private>svg:last-child{width:18px;height:18px}
+.radio-dock button.ptt-dial:disabled{opacity:1;border-color:#3b4351}.radio-dock button.ptt-dial:disabled>svg{opacity:.55}.radio-speaker-strip[data-radio-phase=talking],.radio-speaker-strip[data-radio-phase=busy]{border-color:#ef4444;background:#7f1d1d}.radio-speaker-strip[data-radio-phase=requesting]{border-color:#facc15}
+.radio-speaker-strip[data-radio-phase=granted]{border-color:#facc15;background:#422006}.radio-speaker-ribbon{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:45;display:flex;align-items:center;gap:6px;max-width:320px;padding:8px 14px;border-radius:24px;background:#b91c1c;color:#fff;font-size:12px;font-weight:700;pointer-events:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.radio-speaker-ribbon[data-radio-phase=granted]{background:#854d0e}
+@media(min-width:1024px){.office-map-toolbar{left:auto;max-width:calc(100% - 24px)}.office-map-toolbar>div:first-child{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}}
+@media(max-width:1023px){.radio-speaker-ribbon{display:none}}
+@media(max-width:767px) and (min-height:501px){.map-detail-drawer{bottom:auto!important;max-height:min(320px,calc(100% - 260px))!important}.map-driver-drawer{bottom:128px!important;max-height:calc(100% - 220px)!important}}
+@media(max-height:500px){.map-driver-drawer,.map-detail-drawer{right:12px!important;left:auto!important;width:360px!important;max-width:calc(100% - 342px)!important;bottom:12px!important;top:88px!important;max-height:calc(100% - 100px)!important}}
+.driver-theme .driver-voice-bar.radio-dock,[data-driver-radio-target]{width:300px}.driver-theme .radio-reference-row button.ptt-dial-public{min-height:84px}.driver-theme .radio-reference-row button.ptt-dial-private{min-height:48px}
+.map-resource-notice{position:absolute;top:140px;left:12px;z-index:25;max-width:min(340px,calc(100% - 24px));border:1px solid #d97706;border-radius:10px;padding:7px 10px;background:#fff7d6;color:#713f12;font-size:12px;line-height:1.5;pointer-events:auto}.map-resource-notice[data-map-state=error]{z-index:45}.map-resource-notice details summary{cursor:pointer;min-height:24px}.map-resource-notice p{margin-top:4px}.map-resource-notice button{min-height:44px}
+.driver-map-canvas .map-resource-notice{top:64px;left:auto;right:12px;max-width:min(260px,calc(100% - 24px))}.fleet-map-canvas .map-resource-notice{top:8px;left:12px;right:auto;max-width:calc(100% - 24px)}
+.map-resource-notice[data-map-state=qa]{z-index:5}
+@media(min-width:1024px){.map-driver-drawer{width:300px!important}.map-driver-drawer [data-driver-card]{height:84px}.map-driver-drawer [data-driver-card] strong{font-size:12px}.map-driver-drawer [data-driver-list]{scrollbar-width:thin}}
+@media(max-width:374px){.radio-dock,.driver-theme .driver-voice-bar.radio-dock,[data-driver-radio-target]{width:288px}.radio-reference-row{gap:5px}.radio-private-row{gap:4px}.radio-target{padding:5px;font-size:10px}.radio-reference-info .radio-speaker-strip{padding:5px 7px}.radio-reference-info .radio-speaker-strip>svg{display:none}}
+@media(max-height:500px){.office-radio-dock{left:12px;right:auto;width:288px}.driver-theme .driver-voice-bar.radio-dock,[data-driver-radio-target]{width:288px}.radio-details{transform:translateX(306px);left:0;right:auto;width:min(320px,calc(100vw - 330px))}.map-resource-notice{top:140px;left:auto;right:12px;max-width:240px;font-size:11px}}
+
+/* Provider credits must remain legible in the office's light and dark themes. */
+[data-map-legal] .maplibregl-ctrl-attrib,
+[data-map-legal] .maplibregl-ctrl-attrib-inner,
+[data-map-legal] .maplibregl-ctrl-attrib-inner a {
+  color: var(--taxi-ink, #334155) !important;
+}
+[data-map-legal] .maplibregl-ctrl-attrib {
+  font-size: 12px !important;
+}
+
+/* Reception: local Windows Arabic fonts, no additional font download. */
+.reception-workspace,
+[role="dialog"][dir="rtl"],
+[data-radix-popper-content-wrapper] {
+  font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+.reception-workspace button,
+.reception-workspace input,
+.reception-workspace select,
+.reception-workspace textarea { font-family: inherit; }
+.reception-workspace :is(button, input, select, textarea, summary, a, [role="button"]):focus-visible,
+.reception-picker :is(button, input, [role="option"]):focus-visible,
+[role="dialog"] :is(button, input, select, textarea, summary, [role="button"]):focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+.reception-workspace button:disabled { cursor: not-allowed; opacity: .45; }
+.reception-orders td { padding: 5px 5px; vertical-align: middle; }
+.reception-orders th { color: #1e293b; font-weight: 700; }
+.reception-orders td button { height: 32px; padding-inline: 8px; }
+.reception-orders td:nth-child(4) > button { height: 24px; min-height: 24px; }
+.reception-orders td:nth-child(5) > button { height: auto; }
+.reception-orders td [aria-label="اختيار السائق"] { overflow: hidden; white-space: nowrap; }
+.reception-orders td [aria-label="اختيار السائق"] > span { margin-inline-start: 4px; }
+.reception-orders td:last-child { white-space: nowrap; }
+.reception-orders td:nth-last-child(2) > [data-send-picker] { position: absolute; inset: 5px; opacity: 0; }
+.reception-orders td:last-child button { padding-inline: 4px; font-size: 12px !important; }
+.reception-orders td:nth-last-child(2) > button { width: 100%; padding-inline: 4px; font-size: 13px !important; }
+.reception-orders td [aria-label="اختيار السائق"] { padding-inline: 4px; }
+.reception-orders td [aria-label="اختيار السائق"] > span:last-child:not(:first-child) { flex-shrink: 0; }
+.reception-orders :is(td, th):nth-last-child(-n+2) { position: sticky; background: inherit; z-index: 2; }
+.reception-orders :is(td, th):last-child { left: 0; }
+.reception-orders :is(td, th):nth-last-child(2) { left: var(--reception-actions-width); }
+.reception-orders thead tr { background: #f1f5f9; }
+.reception-orders :is(td, th):nth-last-child(2) { border-right: 1px solid #e2e8f0; }
+.reception-orders tr[data-state] { background: #fff; }
+.reception-orders tr[data-state]:hover { background: #f1f5f9; }
+.reception-orders tr:is([data-state="PENDING"], [data-state="REJECTED"]) { background: #fffbeb; box-shadow: inset -3px 0 #d97706; }
+.reception-orders tr[data-state="SENT"] { box-shadow: inset -3px 0 #d97706; }
+.reception-orders tr:is([data-state="COMPLETED"], [data-state="CANCELLED"]) { background: #f8fafc; color: #64748b; }
+.reception-orders tr[aria-busy="true"] { box-shadow: inset -3px 0 #2563eb; }
+.reception-orders bdi { font-weight: 600; }
+.reception-drivers { width: 100%; max-height: 26vh; }
+/* Office-only tokens: keep the mobile applications' established themes intact. */
+.office-theme {
+  --primary: 48 96% 53%;
+  --primary-foreground: 0 0% 8%;
+  --muted: 210 40% 96%;
+  --muted-foreground: 215 25% 35%;
+  --border: 214 32% 88%;
+  --ring: 45 90% 35%;
+  --accent: 48 100% 94%;
+  --accent-foreground: 0 0% 10%;
+  color-scheme: light;
+}
+.office-theme :is(button, a, input, select, textarea):focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+  scroll-margin-block: 64px;
+}
+.office-navigation nav a { transition: background-color 150ms ease, color 150ms ease; }
+.office-navigation nav a[aria-current="page"] { box-shadow: 0 2px 4px rgb(30 64 175 / 12%); }
+.office-connection { max-width: 48%; line-height: 1.5; }
+.office-theme .reception-drivers { border-color: hsl(var(--border)); box-shadow: 0 1px 3px rgb(15 23 42 / 4%); }
+.office-theme .reception-drivers h2 { align-items: center; padding-block: 4px; }
+.office-theme .reception-drivers h2 > span { border-radius: 999px; background: #f1f5f9; padding: 2px 8px; font-variant-numeric: tabular-nums; }
+.office-theme .reception-drivers li { min-height: 40px; font-size: 13px; }
+@media (pointer: coarse) {
+  .office-theme header button, .office-theme .reception-drivers input,
+  .office-theme .reception-drivers h3 button { min-height: 44px; min-width: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .office-navigation nav a { transition: none; }
+}
+@media (min-width: 1280px) {
+  .reception-drivers { width: 200px; max-height: none; }
+}
+@media (min-width: 1600px) {
+  .reception-drivers { width: 220px; }
+}
+
 @layer base {
   :root {
-    --background: 205 75% 95%;
-    --foreground: 215 30% 25%;
+    --background: 0 0% 98%;
+    --foreground: 0 0% 10%;
     --card: 0 0% 100%;
     --card-foreground: 215 30% 25%;
     --popover: 0 0% 100%;
     --popover-foreground: 215 30% 25%;
-    --primary: 207 68% 53%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 205 75% 90%;
+    --primary: 48 96% 53%;
+    --primary-foreground: 0 0% 8%;
+    --secondary: 0 0% 94%;
     --secondary-foreground: 215 30% 25%;
-    --muted: 205 75% 85%;
+    --muted: 0 0% 94%;
     --muted-foreground: 207 20% 45%;
     --accent: 45 86% 50%;
     --accent-foreground: 45 100% 10%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --border: 205 60% 88%;
+    --border: 0 0% 85%;
     --input: 0 0% 100%;
     --ring: 207 68% 53%;
     --chart-1: 12 76% 61%;
@@ -40,8 +187,8 @@
     --card-foreground: 210 20% 90%;
     --popover: 215 30% 20%;
     --popover-foreground: 210 20% 90%;
-    --primary: 207 68% 53%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 48 96% 53%;
+    --primary-foreground: 0 0% 8%;
     --secondary: 215 30% 25%;
     --secondary-foreground: 210 20% 90%;
     --muted: 215 30% 25%;
@@ -69,3 +216,8 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Compact reception keeps a visible selection even underneath sticky cells. */
+.reception-orders tr[aria-selected="true"] { outline: 2px solid #2563eb; outline-offset: -2px; }
+.reception-driver-panel .reception-drivers { width: 100%; max-height: none; }
+.reception-orders td { padding-block: 3px; }

@@ -1,0 +1,58 @@
+:root{--taxi-bg:#f5f5f1;--taxi-card:#fff;--taxi-ink:#171717;--taxi-muted:#525252;--taxi-border:#d4d4ce;--taxi-yellow:#facc15;color-scheme:light}
+:root[data-taxi-theme=dark]{--taxi-bg:#101112;--taxi-card:#1b1d20;--taxi-ink:#f5f5f4;--taxi-muted:#bcbdbd;--taxi-border:#414346;color-scheme:dark}
+:root[data-taxi-theme=dark],:root[data-taxi-theme=dark] .office-theme{--background:220 6% 7%;--foreground:60 5% 96%;--card:220 8% 12%;--card-foreground:60 5% 96%;--popover:220 8% 12%;--popover-foreground:60 5% 96%;--primary:48 96% 53%;--primary-foreground:0 0% 9%;--muted:220 6% 18%;--muted-foreground:0 0% 74%;--border:220 4% 27%;--input:220 4% 27%;--ring:48 96% 53%;--accent:220 6% 18%;--accent-foreground:60 5% 96%}
+.taxi-surface .bg-card{background:var(--taxi-card)!important;color:var(--taxi-ink)!important}
+.taxi-surface{background:var(--taxi-bg)!important;color:var(--taxi-ink)!important}
+.taxi-theme-control{display:inline-flex;align-items:center;gap:8px;font-size:12px;white-space:nowrap}.taxi-theme-control select{min-height:40px;padding:4px 8px;border:1px solid var(--taxi-border);border-radius:8px;background:var(--taxi-card);color:var(--taxi-ink)}
+.taxi-surface .bg-white,.taxi-surface .bg-slate-50,.taxi-surface .bg-slate-100,.taxi-surface .bg-yellow-50{background:var(--taxi-card)!important}
+.taxi-surface .text-slate-900,.taxi-surface .text-slate-800,.taxi-surface .text-slate-700{color:var(--taxi-ink)!important}.taxi-surface .text-slate-600,.taxi-surface .text-slate-500{color:var(--taxi-muted)!important}
+.taxi-surface input,.taxi-surface textarea,.taxi-surface select{background:var(--taxi-card);color:var(--taxi-ink);border-color:var(--taxi-border)}
+.taxi-surface .border,.taxi-surface .border-t,.taxi-surface .border-b{border-color:var(--taxi-border)}
+.taxi-surface .office-navigation{background:#161719;color:#f5f5f4}.taxi-surface .office-navigation .text-slate-500{color:#bcbdbd!important}.taxi-surface .office-navigation a:hover{background:#303237}.taxi-surface .office-navigation a[aria-current=page]{background:var(--taxi-yellow);color:#171717}
+.taxi-surface .bg-yellow-400,.taxi-surface .bg-primary{background:var(--taxi-yellow)!important;color:#171717!important}.taxi-surface :focus-visible{outline:3px solid var(--taxi-yellow);outline-offset:3px}
+.driver-theme .bg-emerald-50{background:var(--taxi-card)}.driver-theme .text-emerald-950,.driver-theme .text-emerald-800,.driver-theme .text-emerald-700{color:var(--taxi-ink)}.driver-theme header img{border-radius:50%;object-fit:contain}.driver-theme button{touch-action:manipulation}
+.taxi-login{min-height:100dvh;display:grid;grid-template-columns:minmax(340px,1fr) 1.3fr;padding:clamp(20px,5vw,80px);gap:clamp(24px,5vw,80px);align-items:center;background:var(--taxi-bg)!important}
+.taxi-login-card{max-width:440px;width:100%;justify-self:center;background:var(--taxi-card);border:1px solid var(--taxi-border);border-radius:24px;padding:clamp(24px,4vw,48px);box-shadow:0 20px 70px #0004}.taxi-login-card>img{border-radius:50%;margin:auto auto 24px;object-fit:contain}.taxi-login h1{font-size:28px;font-weight:800;margin-bottom:8px}.taxi-login-card>p{color:var(--taxi-muted);margin-bottom:30px}.taxi-login form{display:grid;gap:20px}.taxi-login form label:not(.taxi-remember){display:grid;gap:10px;font-size:15px}.taxi-login input:not([type=checkbox]){width:100%;height:52px;border:1px solid var(--taxi-border);border-radius:10px;padding:12px}.taxi-remember{display:flex;align-items:center;gap:10px}.taxi-remember input{width:18px;height:18px;accent-color:var(--taxi-yellow)}.taxi-login form button{min-height:54px;background:var(--taxi-yellow);color:#171717;font-size:17px;font-weight:800;border-radius:10px}.taxi-login button:disabled{opacity:.6}.taxi-login-card>.taxi-theme-control{margin-top:24px}.taxi-error{color:#e54848}.taxi-login-art{position:relative;text-align:center;color:var(--taxi-ink);min-width:0}.taxi-login-art>img{width:min(100%,680px);margin:auto;object-fit:contain;border-radius:50%}.taxi-login-art h2{font-size:24px;color:var(--taxi-yellow);margin-top:24px;font-weight:800}.taxi-login-art p{margin-top:8px;color:var(--taxi-muted)}
+@media(max-width:800px){.taxi-login{grid-template-columns:1fr;padding:24px;gap:24px}.taxi-login-art{display:none}.taxi-login-card{max-width:440px}}
+@media(prefers-reduced-motion:reduce){.taxi-surface *{scroll-behavior:auto!important}}
+:root[data-taxi-theme=dark] [role=dialog],:root[data-taxi-theme=dark] [role=dialog] .bg-white,:root[data-taxi-theme=dark] .maplibregl-popup-content{background:var(--taxi-card)!important;color:var(--taxi-ink)!important;border-color:var(--taxi-border)}
+:root[data-taxi-theme=dark] [role=dialog] input,:root[data-taxi-theme=dark] [role=dialog] textarea,:root[data-taxi-theme=dark] [role=dialog] select{background:var(--taxi-card);color:var(--taxi-ink);border-color:var(--taxi-border)}
+
+/* Operation center: compact cards and a single stable scroll area. */
+.office-map-panel{box-shadow:-2px 0 12px #0f172a12;font-variant-numeric:tabular-nums}
+.office-map-panel [role=tablist]{border-top:1px solid var(--taxi-border,#e2e8f0);padding-top:8px}
+.office-map-panel [role=tab][aria-selected=true]{outline:2px solid #3b82f6;outline-offset:-2px}
+.office-map-panel [data-driver-card]{contain:layout paint}
+.office-map-panel [role=tabpanel]{scrollbar-gutter:stable}
+.reception-orders [data-send]{min-height:36px;width:100%;padding-inline:8px}
+.reception-orders [data-driver-field]:focus-within{outline:2px solid #2563eb;outline-offset:2px}
+.office-theme details[aria-label="دليل حالات السائقين"]{background:var(--taxi-card)!important;color:var(--taxi-ink)!important}
+:root[data-taxi-theme=dark] .office-map-panel .text-violet-900{color:#c4b5fd}
+:root[data-taxi-theme=dark] .office-theme .maplibregl-marker span.absolute{background:var(--taxi-card)!important;color:#c4b5fd!important}
+
+:root[data-taxi-theme=dark] .office-theme .text-emerald-600,:root[data-taxi-theme=dark] .office-theme .text-emerald-700{color:#6ee7b7}
+:root[data-taxi-theme=dark] .office-theme .text-blue-600,:root[data-taxi-theme=dark] .office-theme .text-blue-700{color:#93c5fd}
+:root[data-taxi-theme=dark] .office-theme .text-red-600,:root[data-taxi-theme=dark] .office-theme .text-red-700{color:#fca5a5}
+:root[data-taxi-theme=dark] .office-theme .text-yellow-500,:root[data-taxi-theme=dark] .office-theme .text-yellow-600{color:#fde047}
+:root[data-taxi-theme=dark] .office-theme .bg-blue-50,:root[data-taxi-theme=dark] .office-theme .bg-emerald-50,:root[data-taxi-theme=dark] .office-theme .bg-red-50{background:#243045;color:#f5f5f4}
+/* Driver working screen: the same map remains mounted throughout the ride. */
+.driver-theme .driver-workspace{max-width:1280px}
+.driver-main{overflow:auto;overscroll-behavior:contain;padding:16px;padding-bottom:max(16px,env(safe-area-inset-bottom))}
+.driver-theme .driver-journey-map{margin-inline:-16px}
+.driver-theme .driver-trip-sheet{margin-top:0!important;position:relative;z-index:1}
+.driver-theme .driver-trip-sheet article{border-radius:24px 24px 16px 16px;padding:16px;background:var(--taxi-card);box-shadow:0 -4px 16px #0000000c;display:flex;flex-wrap:wrap;align-items:center;column-gap:8px}
+.driver-trip-sheet article>div:first-child,.driver-trip-sheet article>p,.driver-trip-sheet article>h2,.driver-trip-sheet article>details,.driver-trip-sheet article>.driver-ride-actions{flex-basis:100%}
+.driver-trip-sheet .driver-ride-actions{order:10}
+.driver-theme .driver-trip-sheet .driver-ride-actions{position:static;width:100%;background:var(--taxi-card);border-radius:18px;padding:6px}
+.driver-theme .driver-trip-sheet .driver-ride-actions button{min-height:56px;padding:12px 16px}
+.driver-trip-sheet article>div:has(>button:first-child){display:inline-flex}
+.driver-theme .driver-duty{padding:0 4px;font-size:12px}.driver-theme .driver-duty strong{padding:4px 10px;font-size:13px}
+.driver-theme .driver-duty span{max-width:64%;font-size:12px}
+.driver-theme [aria-label="المخشيرة"]{padding-top:4px}
+.driver-theme [aria-label="المخشيرة"] button{min-height:48px;font-size:14px}
+.driver-theme [aria-label="المخشيرة"]>p:last-child{display:none}
+.driver-theme [aria-label="المخشيرة"]>p:first-child{margin-bottom:4px;font-size:12px}
+.driver-theme [aria-label="المخشيرة"]>p[role="status"]{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+@media(max-height:480px) and (orientation:landscape){.driver-main{padding-top:4px}.driver-theme .driver-map-canvas{height:calc(100dvh - 192px);min-height:160px}.driver-theme .driver-duty,.driver-theme .driver-health{display:none}[data-driver-radio-target] .driver-voice-bar.radio-dock{left:auto;right:auto}}
+
+.driver-trip-sheet .trip-fare{flex-basis:100%}

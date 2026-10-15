@@ -12,7 +12,7 @@ public static class PricingEngine
         if (rule.Mode == PricingMode.Manual) return null;
         decimal value = rule.Mode == PricingMode.FixedRoute
             ? route is null ? throw new ArgumentException("Fixed route required") : input.ReturnTrip ? route.Return : route.Outbound
-            : rule.BaseFare + input.Kilometers * rule.PerKm + input.Minutes * rule.PerMinute + input.WaitingMinutes * rule.WaitingPerMinute;
+            : rule.BaseFare + rule.ExtraFee + Math.Max(0, input.Kilometers - rule.IncludedDistanceKm) * rule.PerKm + input.Minutes * rule.PerMinute + input.WaitingMinutes * rule.WaitingPerMinute;
         var hour = TimeZoneInfo.ConvertTime(input.At, TimeZoneInfo.FindSystemTimeZoneById(profile.TimeZone)).Hour;
         bool night = rule.NightStartHour != rule.NightEndHour && (rule.NightStartHour < rule.NightEndHour ? hour >= rule.NightStartHour && hour < rule.NightEndHour : hour >= rule.NightStartHour || hour < rule.NightEndHour);
         if (night) value = value * (1 + rule.NightPercent / 100) + rule.NightFixed;
@@ -22,6 +22,6 @@ public static class PricingEngine
     }
     public static void Validate(PricingRule rule)
     {
-        if (!Enum.IsDefined(rule.Mode) || new[] { rule.BaseFare, rule.PerKm, rule.PerMinute, rule.MinimumFare, rule.WaitingPerMinute, rule.NightFixed }.Any(x => x is < 0 or > 10000000) || rule.NightPercent is < 0 or > 1000 || rule.NightStartHour is < 0 or > 23 || rule.NightEndHour is < 0 or > 23) throw new ArgumentException("Invalid pricing rule");
+        if (!Enum.IsDefined(rule.Mode) || new[] { rule.BaseFare, rule.IncludedDistanceKm, rule.ExtraFee, rule.PerKm, rule.PerMinute, rule.MinimumFare, rule.WaitingPerMinute, rule.NightFixed }.Any(x => x is < 0 or > 10000000) || rule.NightPercent is < 0 or > 1000 || rule.NightStartHour is < 0 or > 23 || rule.NightEndHour is < 0 or > 23) throw new ArgumentException("Invalid pricing rule");
     }
 }

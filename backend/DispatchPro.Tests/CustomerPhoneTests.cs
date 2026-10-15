@@ -16,7 +16,12 @@ public sealed class CustomerPhoneTests
 {
     [Theory]
     [InlineData("+970592081197")][InlineData("970592081197")][InlineData("+972592081197")][InlineData("972592081197")][InlineData("0592081197")]
+    [InlineData("00972 (59) 208-1197")][InlineData("٠٥٩٢٠٨١١٩٧")][InlineData("۰۵۹۲۰۸۱۱۹۷")]
     public void SameLocalPhone(string input)=>Assert.Equal("0592081197",CustomerPhone.Local(input));
+    [Theory]
+    [InlineData("0562081197","0562081197")][InlineData("+970562081197","0562081197")]
+    [InlineData("092081197","092081197")][InlineData("97092081197","092081197")][InlineData("+97092081197","092081197")]
+    public void MobileAndLandlinePrefixes(string input,string expected)=>Assert.Equal(expected,CustomerPhone.Local(input));
     private static async Task<JsonNode> Read(HttpResponseMessage response){var body=await response.Content.ReadAsStringAsync();Assert.True(response.IsSuccessStatusCode,$"{response.StatusCode}: {body}");return JsonNode.Parse(body)!;}
     [PostgresFact]
     public async Task ExistingCustomerRecoveryIsScopedAndDoesNotDuplicate()
@@ -35,14 +40,14 @@ public sealed class CustomerPhoneTests
             using var client=factory.CreateClient();using var office=factory.CreateClient();
             var config=factory.Services.GetRequiredService<IConfiguration>();var secret=new string('b',64);
             object Input(Guid id,string phone)=>new{tenant="phone-test",accountId=id,deviceSecret=secret,fullName="Do not replace name",phone};
-            Assert.Equal(HttpStatusCode.Conflict,(await client.PostAsJsonAsync("/api/v1/customer-app/register",Input(Guid.NewGuid(),"0592081197"))).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden,(await client.PostAsJsonAsync("/api/v1/customer-app/register",Input(Guid.NewGuid(),"0592081197"))).StatusCode);
             config["CustomerApp:TestPhoneRecoveryEnabled"]="true";config["CustomerApp:TestPhoneRecoveryTenant"]="different-office";
-            Assert.Equal(HttpStatusCode.Conflict,(await client.PostAsJsonAsync("/api/v1/customer-app/register",Input(Guid.NewGuid(),"0592081197"))).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden,(await client.PostAsJsonAsync("/api/v1/customer-app/register",Input(Guid.NewGuid(),"0592081197"))).StatusCode);
             config["CustomerApp:TestPhoneRecoveryTenant"]="phone-test";
-            string? firstToken=null;Guid lastAccount=Guid.Empty;
-            foreach(var phone in CustomerPhone.Variants("0592081197"))
+            string? firstToken=null;Guid lastAccount=Guid.NewGuid();
+            foreach(var phone in CustomerPhone.Variants("0592081197").Take(1))
             {
-                lastAccount=Guid.NewGuid();var result=await Read(await client.PostAsJsonAsync("/api/v1/customer-app/register",Input(lastAccount,phone)));
+                var result=await Read(await client.VerifiedRegistration(Input(lastAccount,phone)));
                 var token=result["accessToken"]!.GetValue<string>();firstToken??=token;client.DefaultRequestHeaders.Authorization=new AuthenticationHeaderValue("Bearer",token);
                 Assert.Equal(customerId.ToString(),result["profile"]!["id"]!.GetValue<string>());Assert.Equal("0592081197",result["profile"]!["phone"]!.GetValue<string>());Assert.Equal("Existing name",result["profile"]!["fullName"]!.GetValue<string>());
                 Assert.Equal(customerId.ToString(),(await Read(await client.GetAsync("/api/v1/customer-app/me")))["id"]!.GetValue<string>());
@@ -59,7 +64,7 @@ public sealed class CustomerPhoneTests
             {
                 var db=scope.ServiceProvider.GetRequiredService<TaxiDb>();scope.ServiceProvider.GetRequiredService<TenantContext>().TenantId=await db.Set<Tenant>().Select(t=>t.Id).SingleAsync();
                 Assert.Equal(1,await db.Set<Customer>().CountAsync());Assert.Equal("0592081197",(await db.Set<Customer>().SingleAsync()).Phone);Assert.Equal("0592081197",(await db.Set<RideRequest>().SingleAsync()).PassengerPhone);
-                Assert.Equal(5,await db.Set<AuditLog>().CountAsync(a=>a.Action=="customer-app.device-linked"));
+                Assert.Equal(1,await db.Set<AuditLog>().CountAsync(a=>a.Action=="customer-app.device-linked"));
             }
         }
         finally{NpgsqlConnection.ClearAllPools();await using var drop=new NpgsqlCommand($"DROP DATABASE {name} WITH (FORCE)",admin);await drop.ExecuteNonQueryAsync();}

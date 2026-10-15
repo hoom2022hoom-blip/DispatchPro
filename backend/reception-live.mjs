@@ -51,7 +51,11 @@ try {
     await source.append(event);await source.append(event);
     await bridge().runOnce();await bridge().runOnce();assert.equal((await bridge().runOnce()).delivered,0);
     const data=await snapshot();assert.equal(data.rides.filter(r=>r.callEventId===event.eventId).length,1);
-    assert.ok(data.rides.find(r=>r.callEventId===event.eventId).rideRequestId);
+    const draft=data.rides.find(r=>r.callEventId===event.eventId);
+    assert.equal(draft.receptionPending,true);
+    assert.equal(draft.driverId,null);
+    assert.equal(draft.pickup.name,'');
+    assert.equal(draft.rideRequestId??null,null);
     await new Promise((resolve,reject)=>{const timeout=setTimeout(()=>{stop();reject(Error('Latest call timeout'));},5000);const stop=provider.watchLatest(reject);const unsubscribe=provider.subscribeLatest(()=>{if(provider.getLatestCall()?.eventId===event.eventId){clearTimeout(timeout);stop();unsubscribe();resolve();}});});
   }
   const wrongTenant=await fetch(`${apiUrl}/api/v1/reception/bridge/calls`,{method:'POST',headers,body:JSON.stringify({source:'LANDLINE',callerNumber:'0597777777',eventId:'wrong-office',receivedAt:new Date().toISOString(),tenantId:'11111111-1111-1111-1111-111111111111'})});assert.equal(wrongTenant.status,403);

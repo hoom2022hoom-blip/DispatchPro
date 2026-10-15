@@ -116,7 +116,7 @@ public sealed class CompleteHailingStageTests
                 // An office availability change must survive closing the active ride.
                 await f.WithDb(async db=>{(await db.Set<Driver>().SingleAsync(d=>d.Id==f.DriverIds[0])).Status=DriverStatus.Offline;await db.SaveChangesAsync();});
                 var closing=await Read(await f.Office.GetAsync($"/api/v1/rides/{id}"));
-                await Read(await f.Office.PutAsJsonAsync($"/api/v1/rides/{id}/status",new{status=scenario=="P_complete_keeps_offline"?"Completed":"Cancelled",version=closing["ride"]!["version"]!.GetValue<long>()}));
+                await Read(await f.Office.PutAsJsonAsync($"/api/v1/rides/{id}/status",new{status=scenario=="P_complete_keeps_offline"?"Completed":"Cancelled",version=closing["ride"]!["version"]!.GetValue<long>(),collectedFare=scenario=="P_complete_keeps_offline"?(decimal?)30:null}));
                 Assert.Equal("Offline",(await Read(await f.Drivers[0].GetAsync("/api/v1/driver/me")))["status"]!.GetValue<string>());
                 break;
             case "A_nearest_accept":
@@ -219,7 +219,7 @@ public sealed class CompleteHailingStageTests
                 }
                 for(var i=0;i<3;i++){var client=await f.Login("driver"+i,"Stage-driver-123!");f.Drivers.Add(client);await Read(await client.PutAsJsonAsync("/api/v1/driver/location",new{latitude=32.22,longitude=35.251+i*.001,accuracy=5,capturedAt=DateTimeOffset.UtcNow}));}
                 f.Office=await f.Login("admin","Stage-office-123!");f.Customer=f.Factory.CreateClient();
-                var account=await Read(await f.Customer.PostAsJsonAsync("/api/v1/customer-app/register",new{tenant="complete-stage",accountId=Guid.NewGuid(),deviceSecret=new string('e',64),fullName="Stage Customer",phone="0591234567"}));
+                var account=await Read(await f.Customer.VerifiedRegistration(new{tenant="complete-stage",accountId=Guid.NewGuid(),deviceSecret=new string('e',64),fullName="Stage Customer",phone="0591234567"}));
                 f.Customer.DefaultRequestHeaders.Authorization=new AuthenticationHeaderValue("Bearer",account["accessToken"]!.GetValue<string>());return f;
             }catch{await f.DisposeAsync();throw;}
         }
@@ -231,7 +231,7 @@ public sealed class CompleteHailingStageTests
         public async Task<JsonNode> OfficeRow(string id)=>(await Read(await Office.GetAsync("/api/v1/reception/snapshot")))["rides"]!.AsArray().Single(r=>r!["id"]!.GetValue<string>()==id)!;
         public async Task<JsonArray> Offers(int driver)=>(await Read(await Drivers[driver].GetAsync("/api/v1/driver/updates")))["data"]!["rides"]!.AsArray();
         public async Task Accept(int driver,Guid id)=>await Move(driver,id,"Accepted");
-        public async Task Move(int driver,Guid id,string status){var ride=await Read(await Drivers[driver].GetAsync($"/api/v1/driver/rides/{id}"));await Read(await Drivers[driver].PutAsJsonAsync($"/api/v1/rides/{id}/status",new{status,version=ride["version"]!.GetValue<long>()}));}
+        public async Task Move(int driver,Guid id,string status){var ride=await Read(await Drivers[driver].GetAsync($"/api/v1/driver/rides/{id}"));await Read(await Drivers[driver].PutAsJsonAsync($"/api/v1/rides/{id}/status",new{status,version=ride["version"]!.GetValue<long>(),collectedFare=status=="Completed"?(decimal?)30:null}));}
         public async Task Availability(int driver,string status)=>await Read(await Drivers[driver].PutAsJsonAsync("/api/v1/driver/availability",new{status}));
         public async Task WaitForOffer(int driver,Guid id){var deadline=DateTimeOffset.UtcNow.AddSeconds(20);while(DateTimeOffset.UtcNow<deadline){if((await Offers(driver)).Any(r=>r!["id"]!.GetValue<Guid>()==id))return;await Task.Delay(300);}Assert.Fail("Next driver did not receive offer");}
         public async ValueTask DisposeAsync(){Customer?.Dispose();Office?.Dispose();foreach(var d in Drivers)d.Dispose();if(Factory is not null)await Factory.DisposeAsync();NpgsqlConnection.ClearAllPools();if(admin is not null){await using var drop=new NpgsqlCommand($"DROP DATABASE {database} WITH (FORCE)",admin);await drop.ExecuteNonQueryAsync();await admin.DisposeAsync();}}

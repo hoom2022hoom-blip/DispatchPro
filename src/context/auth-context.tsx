@@ -219,7 +219,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 const LOCAL_DEV_MODE = process.env.NODE_ENV === 'development';
 
   useEffect(() => {
-        if (pathname.startsWith('/office') || pathname === '/driver' || (process.env.NEXT_PUBLIC_RECEPTION_BACKEND === 'api' && (pathname === '/' || pathname === '/admin/map'))) {
+        if (pathname.startsWith('/office') || pathname === '/login' || pathname === '/driver' || (process.env.NEXT_PUBLIC_RECEPTION_BACKEND === 'api' && (pathname === '/' || pathname === '/admin/map'))) {
           setUser(null); setAllUsers([]); setFirebaseUser(null); setLoading(false);
           return;
         }

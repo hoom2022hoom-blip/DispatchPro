@@ -1,0 +1,16 @@
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
+(async()=>{
+ const c=JSON.parse(fs.readFileSync(process.argv[2])),out=path.resolve(process.argv[3]);
+ assert.match(c.database,/^dispatchpro_driverqa_20261012_[a-f0-9]{8}$/);assert.equal(c.tenant,'driver-qa');assert.equal(c.apiPort,9027);assert.equal(new URL(c.publicOrigin).protocol,'https:');
+ const status=await fetch(c.publicOrigin+'/qa/status',{signal:AbortSignal.timeout(10000)}).then(r=>r.json());assert.equal(status.database,c.database);assert.equal(status.environment,'DriverQa');assert.equal(status.externalPush,false);assert.equal(status.externalSms,false);assert.equal(status.outboundBlockInstalled,true);
+ const req=async(p,token,method='GET',body)=>{const r=await fetch(c.publicOrigin+'/api/v1/'+p,{method,headers:{Authorization:token?'Bearer '+token:'','Content-Type':'application/json'},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(15000)});assert.ok(r.ok,`QA ${p} HTTP ${r.status}`);return r.json();};
+ const token=(await req('auth/login',null,'POST',{tenant:c.tenant,username:c.officeUser,password:c.officePassword})).accessToken;
+ const driver=(await req('drivers',token)).find(d=>d.id===c.driverId);assert.equal(driver.status,'Available');const rides=await req('rides',token);assert.ok(!rides.some(r=>['Assigned','Accepted','DriverArriving','Arrived','InProgress'].includes(r.status)));
+ const jobs=await req('reception/jobs',token);assert.equal(jobs.length,0);
+ const f=JSON.parse(fs.readFileSync(path.join(out,'../private/phone-journey.private.json')));const trip=await req('rides/'+f.rideId,token);assert.equal(trip.ride.status,'Completed');assert.equal(trip.request.customerId,c.customerId);assert.equal(trip.request.destination,'');
+ const probe=await fetch(c.publicOrigin+'/qa/outbound-probe',{headers:{Authorization:'Bearer '+token}}).then(r=>r.json());assert.equal(probe.blocked,true);assert.equal(probe.networkRequestSent,false);
+ let conversationReady=false;
+ if(process.argv.includes('--conversation')){const snap=await req('office-qa/mobile/updates?deviceId='+require('node:crypto').randomUUID(),token);assert.equal(snap.data.chat.length,0);assert.ok(!snap.data.calls.some(call=>['ringing','active'].includes(call.state)));for(const file of ['station.html','station.js','station.css']){const r=await fetch(c.publicOrigin+'/qa/'+(file==='station.html'?'station':file),{signal:AbortSignal.timeout(10000)});assert.equal(r.status,200);const bytes=Buffer.from(await r.arrayBuffer());assert.ok(bytes.equals(fs.readFileSync(path.join(out,'station',file))),'QA station must match tested staged assets');}conversationReady=true;}
+ const report={at:new Date().toISOString(),https:c.publicOrigin,qaDatabase:c.database,externalPush:false,externalSms:false,outboundNetworkRequestSent:false,qaDriver:'Available',previousTrip:'Completed',previousDestinationStillEmpty:true,queuedJobs:jobs.length,conversationReady,driverLoginPerformed:false,productionAccessed:false,newMessagesCallsOrRidesCreated:false};
+ fs.writeFileSync(path.join(out,'audio-readiness.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report));
+})().catch(e=>{console.error(e.message);process.exitCode=1;});

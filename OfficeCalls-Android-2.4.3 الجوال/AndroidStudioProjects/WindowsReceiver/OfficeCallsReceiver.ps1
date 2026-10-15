@@ -1,18 +1,44 @@
-param([int]$Port = 5050)
-# Office Calls Receiver 2.5 - eventId deduplication, WhatsApp marker and Caller ID broadcast
+﻿param([int]$Port = 5051, [switch]$SmokeTest, [switch]$PairingSmokeTest, [string]$StateDirectory)
+# OfficeCalls Professional 3.2.5 — persistent local receiver, TLS, tray UI
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
+$ErrorActionPreference='Stop'
+Add-Type -AssemblyName System.Security
+$created=$false
+$mutex=[Threading.Mutex]::new($true,'Local\OfficeCallsProfessionalReceiver',[ref]$created)
+if(-not $created){$mutex.Dispose();exit 0}
+$config=& (Join-Path $PSScriptRoot 'Initialize-LocalReceiver.ps1') -Port $Port -StateDirectory $StateDirectory
+$stateDirectory=$config.directory
+$configPath=Join-Path $stateDirectory 'receiver.json'
+$secretBytes=[Security.Cryptography.ProtectedData]::Unprotect([IO.File]::ReadAllBytes((Join-Path $stateDirectory 'credentials.dpapi')),$null,[Security.Cryptography.DataProtectionScope]::CurrentUser)
+$secrets=[Text.Encoding]::UTF8.GetString($secretBytes) | ConvertFrom-Json
+Add-Type -Path (Join-Path $PSScriptRoot 'ReceiverUiReader.cs')
+Add-Type -Path (Join-Path $PSScriptRoot 'ReceiverProcessJob.cs')
+$nodePath=Join-Path $PSScriptRoot 'runtime/node.exe'
+if(-not (Test-Path -LiteralPath $nodePath)){$nodePath=(Get-Command node.exe -ErrorAction Stop).Source}
+$entry=Join-Path $PSScriptRoot 'scripts/officecalls-agent/local-start.mjs'
+if(-not(Test-Path -LiteralPath $entry)){$entry=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../../scripts/officecalls-agent/local-start.mjs'))}
+function Start-LocalWorker {
+ if($script:workerJob){$script:workerJob.Dispose()}
+ $psi=[Diagnostics.ProcessStartInfo]::new();$psi.FileName=$nodePath;$psi.Arguments='"'+$entry+'" "'+$configPath+'"'
+ $psi.UseShellExecute=$false;$psi.CreateNoWindow=$true;$psi.WindowStyle='Hidden';$psi.RedirectStandardInput=$true
+ $script:worker=[Diagnostics.Process]::Start($psi)
+ try{$script:workerJob=[OfficeCallsProcessJob]::new($script:worker)}catch{if(-not $script:worker.HasExited){$script:worker.Kill()};throw}
+ $script:worker.StandardInput.Write(($secrets | ConvertTo-Json -Compress));$script:worker.StandardInput.Close()
+ $script:reader=[OfficeCallsUiReader]::new([int]$config.port,[string]$secrets.token,[string]$config.pin)
+}
+Start-LocalWorker
 [System.Windows.Forms.Application]::EnableVisualStyles()
 
 $form = New-Object System.Windows.Forms.Form
-$form.Text = "Office Calls - WhatsApp Business"
-$form.Size = New-Object System.Drawing.Size(760, 560)
+$form.Text = "OfficeCalls Professional 3.2.5 — مكالمات المكتب"
+$form.Size = New-Object System.Drawing.Size(780, 660)
 $form.StartPosition = "CenterScreen"
 $form.BackColor = [System.Drawing.Color]::FromArgb(245, 247, 250)
 $form.Font = New-Object System.Drawing.Font("Segoe UI", 11)
-$logPath = Join-Path $PSScriptRoot "OfficeCalls-error.log"
+$logPath = Join-Path $stateDirectory "OfficeCalls-error.log"
 $script:processedEvents = @{}
 $script:processedOrder = [System.Collections.Generic.Queue[string]]::new()
 $script:eventRetention = [TimeSpan]::FromMinutes(10)
@@ -59,20 +85,21 @@ $title.Location = New-Object System.Drawing.Point(25, 18)
 $form.Controls.Add($title)
 
 $status = New-Object System.Windows.Forms.Label
-$status.Text = "Starting receiver..."
+$status.Text = "جارٍ تشغيل المستقبِل المحلي المشفّر…"
 $status.AutoSize = $true
+$status.MaximumSize = New-Object System.Drawing.Size(690, 44)
 $status.ForeColor = [System.Drawing.Color]::DarkGreen
 $status.Location = New-Object System.Drawing.Point(29, 62)
 $form.Controls.Add($status)
 
 $callerCaption = New-Object System.Windows.Forms.Label
-$callerCaption.Text = "CURRENT CALLER"
+$callerCaption.Text = "آخر مكالمة"
 $callerCaption.AutoSize = $true
 $callerCaption.Location = New-Object System.Drawing.Point(29, 108)
 $form.Controls.Add($callerCaption)
 
 $caller = New-Object System.Windows.Forms.Label
-$caller.Text = "Waiting for a WhatsApp Business call"
+$caller.Text = "بانتظار مكالمة واتساب أو بزنس"
 $caller.Font = New-Object System.Drawing.Font("Segoe UI", 25, [System.Drawing.FontStyle]::Bold)
 $caller.TextAlign = "MiddleCenter"
 $caller.BackColor = [System.Drawing.Color]::White
@@ -82,7 +109,7 @@ $caller.Size = New-Object System.Drawing.Size(680, 105)
 $form.Controls.Add($caller)
 
 $historyCaption = New-Object System.Windows.Forms.Label
-$historyCaption.Text = "CALL HISTORY"
+$historyCaption.Text = "سجل المكالمات — W واتساب / WB بزنس"
 $historyCaption.AutoSize = $true
 $historyCaption.Location = New-Object System.Drawing.Point(29, 270)
 $form.Controls.Add($historyCaption)
@@ -91,12 +118,13 @@ $history = New-Object System.Windows.Forms.ListView
 $history.View = "Details"
 $history.FullRowSelect = $true
 $history.GridLines = $true
-$history.Location = New-Object System.Drawing.Point(30, 298)
-$history.Size = New-Object System.Drawing.Size(680, 170)
-[void]$history.Columns.Add("Time", 85)
-[void]$history.Columns.Add("W", 45)
-[void]$history.Columns.Add("Caller / number", 285)
-[void]$history.Columns.Add("Device", 235)
+$history.Location = New-Object System.Drawing.Point(30, 330)
+$history.Size = New-Object System.Drawing.Size(680, 200)
+[void]$history.Columns.Add("التاريخ والوقت — فلسطين", 180)
+[void]$history.Columns.Add("المصدر", 65)
+[void]$history.Columns.Add("الرقم / الاسم", 190)
+[void]$history.Columns.Add("GRIDCMS", 125)
+[void]$history.Columns.Add("DispatchPro", 120)
 $form.Controls.Add($history)
 
 $tip = New-Object System.Windows.Forms.NotifyIcon
@@ -105,8 +133,8 @@ $tip.Text = "Office Calls Receiver"
 $tip.Visible = $true
 
 $trayMenu = New-Object System.Windows.Forms.ContextMenuStrip
-$openItem = $trayMenu.Items.Add("Open Office Calls")
-$exitItem = $trayMenu.Items.Add("Exit")
+$openItem = $trayMenu.Items.Add("فتح مكالمات المكتب")
+$exitItem = $trayMenu.Items.Add("خروج")
 $tip.ContextMenuStrip = $trayMenu
 $script:allowExit = $false
 
@@ -126,14 +154,8 @@ $exitItem.Add_Click({
 function Convert-ToLocalPhone([string]$Value) {
     if ([string]::IsNullOrWhiteSpace($Value)) { return "" }
     $digits = $Value -replace '[^0-9]', ''
-    if ($digits.StartsWith("00970") -or $digits.StartsWith("00972")) {
-        $digits = $digits.Substring(5)
-    } elseif ($digits.StartsWith("970") -or $digits.StartsWith("972")) {
-        $digits = $digits.Substring(3)
-    }
-    if ($digits.Length -eq 9 -and -not $digits.StartsWith("0")) {
-        $digits = "0" + $digits
-    }
+    # Worker supplies metadata-derived national display. Never strip an unverified country code here.
+    if ($Value.Trim().StartsWith('+') -or $Value.Trim().StartsWith('00')) { return $Value }
     return $digits
 }
 
@@ -156,9 +178,9 @@ function New-WhozzCallingPayload([string]$Phone) {
     )
 
     $digits = $Phone -replace '[^0-9]', ''
-    if ($digits.Length -gt 15) { $digits = $digits.Substring(0, 15) }
+    if ($Phone -notmatch '^\d{4,15}$') { throw 'GRID_PHONE_UNREPRESENTABLE' }
     $dashed = Format-WhozzPhone $digits
-    if ($dashed.Length -gt 15) { $dashed = $dashed.Substring(0, 15) }
+    if ($dashed.Length -gt 15) { throw 'GRID_PHONE_TOO_LONG' }
 
     $stamp = (Get-Date).ToString("MM/dd hh:mm tt", [System.Globalization.CultureInfo]::InvariantCulture).ToUpperInvariant()
     # 04 is the dedicated valid line for WhatsApp calls. GRIDCMS displays it as L=4.
@@ -186,7 +208,7 @@ function Send-ToGridCMS([string]$Phone) {
         # Send exactly one packet because duplicate packets can terminate older GRIDCMS builds.
         $destination = New-Object System.Net.IPEndPoint([System.Net.IPAddress]::Broadcast, 3520)
         [void]$udp.Send($bytes, $bytes.Length, $destination)
-        Write-OfficeCallsLog ("GRIDCMS UDP SENT: $Phone -> 255.255.255.255:3520 ($($bytes.Length) bytes)")
+        Write-OfficeCallsLog ("GRIDCMS UDP SENT: ***$($Phone.Substring([Math]::Max(0,$Phone.Length-3))) -> 255.255.255.255:3520 ($($bytes.Length) bytes)")
     } finally {
         $udp.Close()
     }
@@ -200,84 +222,76 @@ function Get-LocalIPv4 {
     } catch { return @() }
 }
 
-try {
-    $listener = New-Object System.Net.Sockets.TcpListener([System.Net.IPAddress]::Any, $Port)
-    $listener.Start(200)
-    $addresses = (Get-LocalIPv4) -join "  /  "
-    if ([string]::IsNullOrWhiteSpace($addresses)) { $addresses = "IP address not found" }
-    $status.Text = "Ready - Phone IP setting: $addresses   Port: $Port"
-} catch {
-    Write-OfficeCallsLog ("START ERROR: " + $_.Exception.ToString())
-    [System.Windows.Forms.MessageBox]::Show("Could not start receiver on port $Port.`r`n$($_.Exception.Message)", "Office Calls")
-    $tip.Dispose()
-    exit 1
+$addresses=@(Get-LocalIPv4 | Where-Object {$_ -match '^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)'})
+$status.Text="IP: $($addresses -join ' / ')  HTTPS: $($config.port)"
+$pairButton=New-Object Windows.Forms.Button
+$pairButton.Text='إعدادات الاتصال والاقتران';$pairButton.Location=New-Object Drawing.Point(30,282);$pairButton.Size=New-Object Drawing.Size(300,38)
+$form.Controls.Add($pairButton)
+. (Join-Path $PSScriptRoot 'PairingDialog.ps1')
+. (Join-Path $PSScriptRoot 'AdvancedReceiverSettings.ps1')
+$pairButton.Add_Click({Show-OfficePairingDialog})
+$form.RightToLeft=[Windows.Forms.RightToLeft]::Yes
+$caller.RightToLeft=[Windows.Forms.RightToLeft]::No
+$history.RightToLeftLayout=$true
+$script:shownSequence=-1
+$script:lastNotified=''
+function Get-DeliveryText([string]$value){
+ switch($value){
+  'UDP_SENT'{'أُرسل؛ العرض غير مؤكد'}
+  'UDP_UNCERTAIN'{'إرسال غير مؤكد'}
+  'GRID_BLOCKED'{'تعذر تمثيل الرقم بأمان؛ محفوظ كاملًا'}
+  'PENDING'{'بانتظار الإرسال'}
+  'NUMBER_UNAVAILABLE'{'الرقم غير متاح'}
+  'DELIVERED'{'أكد الموقع'}
+  'HISTORY_ONLY'{'سجل قديم'}
+  'DISABLED'{'معطل'}
+  'NOT_CONFIGURED'{'غير مهيأ'}
+  'RETRYING'{'ينتظر إعادة الاتصال'}
+  'READY'{'جاهز'}
+  'EXISTING_CALLER_ID_PATH'{'مسار الأرضي القائم'}
+  'EXISTING_INBOX_ONLY'{'متابعة صندوق الأرضي'}
+  'EXISTING_CAPTURE_OBSERVED'{'التقاط سابق قائم'}
+  'EXISTING_CAPTURE_OR_PORT_OCCUPIED'{'المنفذ مشغول؛ تحقق من الالتقاط'}
+  'CAPTURE_PROCESS_RUNNING_UNVERIFIED'{'الالتقاط يعمل؛ بانتظار تحقق مكالمة'}
+  'CAPTURE_STOPPED'{'توقف الالتقاط'}
+  default{if($value){$value}else{'غير مهيأ'}}
+ }
 }
-
-$timer = New-Object System.Windows.Forms.Timer
-$timer.Interval = 150
+$timer=New-Object Windows.Forms.Timer;$timer.Interval=500
 $timer.Add_Tick({
-    try {
-        while ($listener.Pending()) {
-            $client = $listener.AcceptTcpClient()
-            $client.ReceiveTimeout = 2500
-            try {
-                $reader = New-Object System.IO.StreamReader($client.GetStream(), [System.Text.Encoding]::UTF8)
-                $line = $reader.ReadLine()
-                if (-not [string]::IsNullOrWhiteSpace($line)) {
-                    $data = $line | ConvertFrom-Json
-                    $eventId = [string]$data.eventId
-                    if ([string]::IsNullOrWhiteSpace($eventId)) {
-                        # توافق احتياطي مع مرسل قديم؛ النسخة الحالية من Android ترسل eventId دائمًا.
-                        $eventId = "legacy-" + [Guid]::NewGuid().ToString()
-                    }
-                    $alreadyProcessed = Test-ProcessedEvent $eventId
-                    if ($alreadyProcessed) {
-                        Write-OfficeCallsLog ("DUPLICATE EVENT IGNORED: $eventId")
-                        $ackWriter = [System.IO.StreamWriter]::new($client.GetStream(), [System.Text.UTF8Encoding]::new($false), 1024, $true)
-                        $ackWriter.AutoFlush = $true
-                        $ackWriter.WriteLine("OK $eventId")
-                        continue
-                    }
-                    $rawNumber = [string]$data.number
-                    if ([string]::IsNullOrWhiteSpace($rawNumber) -and ([string]$data.caller -match '[0-9]')) {
-                        $rawNumber = [string]$data.caller
-                    }
-                    $localPhone = Convert-ToLocalPhone $rawNumber
-                    $display = $localPhone
-                    if ([string]::IsNullOrWhiteSpace($display)) { $display = [string]$data.caller }
-                    if ([string]::IsNullOrWhiteSpace($display)) { $display = [string]$data.displayName }
-                    if ([string]::IsNullOrWhiteSpace($display)) { $display = "Unknown WhatsApp caller" }
-                    $caller.Text = $display
-                    $item = New-Object System.Windows.Forms.ListViewItem((Get-Date).ToString("HH:mm:ss"))
-                    [void]$item.SubItems.Add("W")
-                    [void]$item.SubItems.Add($display)
-                    [void]$item.SubItems.Add([string]$data.device)
-                    $history.Items.Insert(0, $item)
-                    while ($history.Items.Count -gt 100) { $history.Items.RemoveAt($history.Items.Count - 1) }
-
-                    if (-not [string]::IsNullOrWhiteSpace($localPhone)) {
-                        Send-ToGridCMS $localPhone
-                        $status.Text = "Sent to GRIDCMS: $localPhone"
-                    }
-                    Register-ProcessedEvent $eventId
-                    Write-OfficeCallsLog ("EVENT PROCESSED ONCE: $eventId / $localPhone")
-                    $ackWriter = [System.IO.StreamWriter]::new($client.GetStream(), [System.Text.UTF8Encoding]::new($false), 1024, $true)
-                    $ackWriter.AutoFlush = $true
-                    $ackWriter.WriteLine("OK $eventId")
-                    $tip.BalloonTipTitle = "Office Calls 2.5 - W"
-                    $tip.BalloonTipText = "Sent to GRIDCMS: $display"
-                    $tip.ShowBalloonTip(1500)
-                    # Keep running quietly in the notification area without covering GRIDCMS.
-                }
-            } finally {
-                $client.Close()
-            }
-        }
-    } catch {
-        Write-OfficeCallsLog ("RECEIVER ERROR: " + $_.Exception.ToString())
-        $status.Text = "Receiver error: $($_.Exception.Message)"
-        $status.ForeColor = [System.Drawing.Color]::DarkRed
-    }
+ try {
+  if($script:worker.HasExited){$status.Text='توقف المستقبِل — راجع تعارض المنفذ أو السجل';$status.ForeColor=[Drawing.Color]::DarkRed;return}
+  $snapshot=$script:reader.Take();$script:reader.Poll()
+  if(-not $snapshot){return};$response=$snapshot | ConvertFrom-Json
+  if($response.error){$status.Text='غير متصل — جارٍ انتظار المستقبِل';return}
+  $events=@($response.events)
+  foreach($line in @($response.landline)){
+   if(-not $line.event){continue}
+   $events+= [pscustomobject]@{event=[pscustomobject]@{eventId=$line.event.eventId;timestamp=([DateTimeOffset]::Parse($line.event.timestamp).ToUnixTimeMilliseconds());number=$line.event.phone;package='LANDLINE_ICALL';device='Caller ID';displayName=''};grid='EXISTING_CALLER_ID_PATH';dispatch=$line.dispatch;sequence=0}
+  }
+  $events=@($events | Sort-Object {$_.event.timestamp} -Descending | Select-Object -First 200)
+  $sequence=[string](($events | Measure-Object -Property sequence -Maximum).Maximum)+':'+[string]$events.Count+':'+[string]$events[0].event.eventId
+  $status.ForeColor=[Drawing.Color]::DarkGreen
+  $recent=@($response.devices | Where-Object {([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()-[long]$_.lastSeen) -lt 60000}).Count
+  $site=if($response.bridge.configured){Get-DeliveryText ([string]$response.bridge.dispatch)}else{'غير مهيأ'}
+  $captureText=Get-DeliveryText ([string]$response.bridge.capture)
+  $status.Text="المستقبل يعمل • هواتف ظهرت آخر دقيقة: $recent • الموقع: $site • الأرضي: $captureText"
+  if($sequence -eq $script:shownSequence){return};$script:shownSequence=$sequence
+  $history.BeginUpdate();$history.Items.Clear()
+  foreach($row in $events){
+   $e=$row.event;$display=$(if($e.number){$e.number}else{'الرقم غير متاح'})+$(if($e.displayName){' — '+$e.displayName}else{''})
+   # Local Receiver uses IANA Asia/Hebron, independent of the Windows desktop timezone.
+   $time=[string]$row.callTime
+   if(-not $time){$time=[TimeZoneInfo]::ConvertTime([DateTimeOffset]::FromUnixTimeMilliseconds([long]$e.timestamp),[TimeZoneInfo]::FindSystemTimeZoneById('West Bank Standard Time')).ToString('yyyy-MM-dd HH:mm:ss',[Globalization.CultureInfo]::InvariantCulture)}
+   $item=New-Object Windows.Forms.ListViewItem($time);[void]$item.SubItems.Add($(if($e.package -eq 'LANDLINE_ICALL'){'أرضي'}elseif($e.package -eq 'com.whatsapp.w4b'){'WB'}else{'W'}));[void]$item.SubItems.Add($display)
+   [void]$item.SubItems.Add((Get-DeliveryText ([string]$row.grid)));[void]$item.SubItems.Add((Get-DeliveryText ([string]$row.dispatch)));$item.ToolTipText='eventId='+$e.eventId+'; deviceId='+$e.deviceId+'; source='+$e.resolutionSource+'; reason='+$e.failureReason+'; phone='+$e.device+'; GRIDCMS='+$row.grid+'; DispatchPro='+$row.dispatch
+   [void]$history.Items.Add($item)
+  }
+  $history.EndUpdate();$history.ShowItemToolTips=$true
+  if($events.Count -gt 0){$e=$events[0].event;$caller.Text=if($e.number){$e.number}else{'مكالمة واتساب — الرقم غير متاح'}
+   $callerCaption.Text='آخر مكالمة — '+[char]0x2066+[string]$events[0].callTime+[char]0x2069+' — بتوقيت فلسطين'
+   $script:lastNotified=$e.eventId}
+ }catch{$status.Text='تعذر تحديث العرض — الاستقبال يعمل بالخلفية';Write-OfficeCallsLog ('UI_ERROR: '+$_.Exception.GetType().Name)}
 })
 $timer.Start()
 
@@ -290,7 +304,9 @@ $form.Add_FormClosing({
         return
     }
     $timer.Stop()
-    $listener.Stop()
+    if(-not $script:worker.HasExited){$script:worker.Kill()}
+    if($script:workerJob){$script:workerJob.Dispose()}
+    $mutex.ReleaseMutex();$mutex.Dispose()
     $tip.Visible = $false
     $tip.Dispose()
 })
@@ -300,12 +316,12 @@ $form.Add_Shown({
     $form.WindowState = [System.Windows.Forms.FormWindowState]::Minimized
     $form.ShowInTaskbar = $false
     $tip.BalloonTipTitle = "Office Calls"
-    $tip.BalloonTipText = "Receiver 2.5 is running in the background - W = WhatsApp"
+    $tip.BalloonTipText = "مستقبِل 3.2.5 يعمل بالخلفية — W واتساب / WB بزنس"
     $tip.ShowBalloonTip(2500)
 })
 
 try {
-    [void]$form.ShowDialog()
+    if($SmokeTest){$form.Opacity=0;$form.Show();$end=[DateTime]::UtcNow.AddSeconds(5);while([DateTime]::UtcNow -lt $end){[Windows.Forms.Application]::DoEvents();Start-Sleep -Milliseconds 50};if($script:worker.HasExited){throw "WORKER_EXITED"};if($PairingSmokeTest){Show-OfficePairingDialog};$script:allowExit=$true;$form.Close();Write-Output "UI_SMOKE_PASS"}else{[void]$form.ShowDialog()}
 } catch {
     Write-OfficeCallsLog ("FATAL ERROR: " + $_.Exception.ToString())
     [System.Windows.Forms.MessageBox]::Show("Office Calls stopped unexpectedly.`r`nSee OfficeCalls-error.log in the program folder.", "Office Calls")

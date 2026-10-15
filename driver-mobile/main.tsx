@@ -11,4 +11,4 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') window.dispatchEvent(new Event('online'));
 });
 window.addEventListener('pageshow', () => window.dispatchEvent(new Event('online')));
-createRoot(document.getElementById('app')!).render(<DriverApiDashboard />);
+createRoot(document.getElementById('app')!).render(<DriverApiDashboard logoSrc="office-logo.webp" />);

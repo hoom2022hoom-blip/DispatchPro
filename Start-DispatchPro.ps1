@@ -1,4 +1,4 @@
-param([switch]$NoWatch)
+param([switch]$NoWatch, [switch]$NoBrowser)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $root
@@ -26,6 +26,16 @@ foreach ($envFile in @((Join-Path $root '.env'), (Join-Path $root '.env.local'))
 }
 $env:ASPNETCORE_URLS = $apiUrl
 $env:DISPATCHPRO_API_URL = $apiUrl
+$buildRoot = Join-Path $root '.dispatchpro-local\api-builds'
+$sourceHashes = @(Get-ChildItem -LiteralPath $apiProject -Recurse -File | Where-Object { $_.FullName -notmatch '\\(bin|obj)\\' -and $_.Extension -in @('.cs','.csproj','.json') } | Sort-Object FullName | ForEach-Object { $_.FullName + ':' + (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash })
+$fingerprintAlgorithm = [Security.Cryptography.SHA256]::Create()
+try { $sourceFingerprint = [BitConverter]::ToString($fingerprintAlgorithm.ComputeHash([Text.Encoding]::UTF8.GetBytes(($sourceHashes -join "`n")))).Replace('-', '') } finally { $fingerprintAlgorithm.Dispose() }
+$buildDir = Join-Path $buildRoot $sourceFingerprint
+$apiDll = Join-Path $buildDir 'DispatchPro.Api.dll'
+# Build away from a running DLL so updates can be validated before stopping it.
+& dotnet.exe build $apiProject --no-restore --output $buildDir --nologo
+if ($LASTEXITCODE -ne 0) { throw 'Current API build failed; existing processes were left running.' }
+$expectedHash = (Get-FileHash -LiteralPath $apiDll -Algorithm SHA256).Hash
 
 function Get-ListeningPids([int]$port) {
     $found = @()
@@ -36,7 +46,7 @@ function Get-ListeningPids([int]$port) {
 }
 function Get-HttpStatus([string]$url, [string]$method = 'GET', [string]$body = '') {
     try {
-        $params = @{ Uri = $url; Method = $method; TimeoutSec = 3; UseBasicParsing = $true }
+        $params = @{ Uri = $url; Method = $method; TimeoutSec = 15; UseBasicParsing = $true }
         if ($method -ne 'GET') { $params.ContentType = 'application/json'; $params.Body = $body }
         $response = Invoke-WebRequest @params
         return [int]$response.StatusCode
@@ -47,8 +57,10 @@ function Get-HttpStatus([string]$url, [string]$method = 'GET', [string]$body = '
 }
 function Test-ProxyRoute {
     # Empty credentials must be rejected by ASP.NET (401), proving Next did not return its own route-unavailable 404.
-    $status = Get-HttpStatus "$webUrl/api/reception/auth/login" 'POST' '{}'
-    return ($status -ne 0 -and $status -ne 404 -and $status -ne 503)
+    foreach ($path in @('/api/reception/auth/login', '/api/auth/login')) {
+        if ((Get-HttpStatus "$webUrl$path" 'POST' '{"tenant":"launcher-probe","username":"launcher-probe","password":""}') -ne 401) { return $false }
+    }
+    return $true
 }
 function Test-ApiOperational {
     if ((Get-HttpStatus "$apiUrl/health/live") -ne 200) { return $false }
@@ -61,13 +73,13 @@ function Wait-ApiReady([int]$seconds, [System.Diagnostics.Process]$process) {
     $until = (Get-Date).AddSeconds($seconds)
     do {
         if ($process -and $process.HasExited) { return $false }
-        if ((Get-HttpStatus "$apiUrl/health/ready") -eq 200 -or (Test-ApiOperational)) { return $true }
+        if ((Get-HttpStatus "$apiUrl/health/ready") -eq 200 -and (Test-ApiOperational)) { return $true }
         Start-Sleep -Seconds 2
     } while ((Get-Date) -lt $until)
     return $false
 }
 function Start-ApiProcess {
-    $arguments = "run --no-launch-profile --project `"$apiProject`""
+    $arguments = "`"$apiDll`" --contentRoot `"$apiProject`""
     return Start-Process -FilePath 'dotnet.exe' -ArgumentList $arguments -WorkingDirectory $root -WindowStyle Hidden -RedirectStandardOutput $apiOut -RedirectStandardError $apiErr -PassThru
 }
 
@@ -76,8 +88,25 @@ $apiPids = Get-ListeningPids 9010
 $apiProcess = $null
 $startedApi = $false
 if ($apiPids.Count -gt 0) {
+    $identity = $null
+    try { $identity = Invoke-RestMethod "$apiUrl/health/live" -TimeoutSec 3 } catch { }
+    if ($identity.assemblyHash -ne $expectedHash) {
+        foreach ($listenerId in $apiPids) {
+            $listener = Get-CimInstance Win32_Process -Filter "ProcessId=$listenerId"
+            $owned = ($listener.ExecutablePath -and $listener.ExecutablePath.StartsWith($apiProject + '\', [StringComparison]::OrdinalIgnoreCase)) -or ($listener.CommandLine -and ($listener.CommandLine.Contains((Join-Path $root '.dispatchpro-local\api\DispatchPro.Api.dll')) -or $listener.CommandLine.Contains((Join-Path $root '.dispatchpro-local\pickup-destination-api\DispatchPro.Api.dll')) -or $listener.CommandLine.Contains((Join-Path $root 'artifacts\customers-improvement\api\DispatchPro.Api.dll')) -or $listener.CommandLine.Contains($buildRoot + '\') -or $listener.CommandLine.Contains((Join-Path $apiProject 'bin\'))))
+            if (-not $owned) { throw 'Port 9010 belongs to an unrecognized process; it was left running.' }
+        }
+        foreach ($listenerId in $apiPids) { Stop-Process -Id $listenerId -Force }
+        $until = (Get-Date).AddSeconds(15)
+        while ((Get-ListeningPids 9010).Count -gt 0 -and (Get-Date) -lt $until) { Start-Sleep -Milliseconds 250 }
+        if ((Get-ListeningPids 9010).Count -gt 0) { throw 'Previous API did not release port 9010.' }
+        $apiPids = @()
+        Write-Host 'Replaced the verified project API because its DLL was outdated.' -ForegroundColor Cyan
+    }
+}
+if ($apiPids.Count -gt 0) {
     if (-not (Test-ApiOperational)) { throw 'Port 9010 is occupied, but the existing API/database login route is not operational. No second API was started. Check .dispatchpro-local\logs\api.stderr.log and PostgreSQL availability.' }
-    if ((Get-HttpStatus "$apiUrl/health/ready") -ne 200) { Write-Host 'Warning: strict /health/ready is 503; live API and its database-backed login query work. No database changes were attempted.' -ForegroundColor Yellow }
+    if ((Get-HttpStatus "$apiUrl/health/ready") -ne 200) { throw 'Database readiness failed (connection or pending migrations). Frontend was not started.' }
     Write-Host 'Existing API detected and operational on 127.0.0.1:9010; reusing it.' -ForegroundColor Green
 } else {
     if (-not (Test-Path -LiteralPath $apiProject)) { throw "API project not found: $apiProject" }
@@ -89,7 +118,32 @@ if ($apiPids.Count -gt 0) {
 
 $webPids = Get-ListeningPids 9005
 if ($webPids.Count -gt 0) {
-    if ((Get-HttpStatus "$webUrl/office/reception") -ne 200 -or -not (Test-ProxyRoute)) { throw 'Port 9005 is occupied by a frontend whose Reception proxy does not reach the API; no second frontend was started.' }
+    $restartWeb = $false
+    $configFiles = @('next.config.ts','package.json','.env','.env.local') | ForEach-Object { Get-Item -LiteralPath (Join-Path $root $_) -ErrorAction SilentlyContinue }
+    foreach ($listenerId in $webPids) {
+        $listener = Get-CimInstance Win32_Process -Filter "ProcessId=$listenerId"
+        if (-not $listener.CommandLine -or -not $listener.CommandLine.Contains((Join-Path $root 'node_modules\next\'))) { throw 'Port 9005 belongs to an unrecognized frontend; it was left running.' }
+        $parent = Get-CimInstance Win32_Process -Filter "ProcessId=$($listener.ParentProcessId)"
+        # Development serves current sources. Recycle production output or pre-update configuration.
+        if (-not $parent.CommandLine -or $parent.CommandLine -notmatch '\sdev(?:\s|$)' -or @($configFiles | Where-Object { $_.LastWriteTime -gt (Get-Process -Id $listenerId).StartTime }).Count -gt 0) { $restartWeb = $true }
+    }
+    if ($restartWeb) {
+        foreach ($listenerId in $webPids) { Stop-Process -Id $listenerId -Force }
+        $until = (Get-Date).AddSeconds(15)
+        while ((Get-ListeningPids 9005).Count -gt 0 -and (Get-Date) -lt $until) { Start-Sleep -Milliseconds 250 }
+        if ((Get-ListeningPids 9005).Count -gt 0) { throw 'Previous frontend did not release port 9005.' }
+        $webPids = @()
+    }
+}
+if ($webPids.Count -gt 0) {
+    # Next development routes may need their first compilation after an update.
+    $until = (Get-Date).AddSeconds(120)
+    $webReady = $false
+    do {
+        if ((Get-HttpStatus "$webUrl/office/reception") -eq 200 -and (Test-ProxyRoute)) { $webReady = $true; break }
+        Start-Sleep -Seconds 2
+    } while ((Get-Date) -lt $until)
+    if (-not $webReady) { throw 'Project frontend does not reach the current API through both login routes. Inspect .dispatchpro-local\logs.' }
     Write-Host 'Existing Next.js frontend detected; Reception proxy reaches the API.' -ForegroundColor Green
 } else {
     $webProcess = Start-Process -FilePath 'npm.cmd' -ArgumentList @('run','dev') -WorkingDirectory $root -WindowStyle Hidden -RedirectStandardOutput $webOut -RedirectStandardError $webErr -PassThru
@@ -103,7 +157,7 @@ if ($webPids.Count -gt 0) {
     Write-Host 'Next.js frontend is ready on 127.0.0.1:9005 and Reception proxy is connected.' -ForegroundColor Green
 }
 
-Start-Process "$webUrl/office/reception"
+if (-not $NoBrowser) { Start-Process "$webUrl/office/reception" -WindowStyle Hidden }
 Write-Host 'Open: http://127.0.0.1:9005/office/reception' -ForegroundColor Cyan
 if ($startedApi -and -not $NoWatch) {
     Write-Host 'Monitoring the API started by this launcher. One restart is allowed if its process exits.' -ForegroundColor DarkGray

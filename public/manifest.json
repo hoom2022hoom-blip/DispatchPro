@@ -1,12 +1,12 @@
 {
-  "theme_color": "#2076d2",
+  "theme_color": "#111827",
   "background_color": "#eaf3fa",
   "display": "standalone",
   "scope": "/",
   "start_url": "/",
-  "name": "DispatchPro",
-  "short_name": "DispatchPro",
-  "description": "A professional taxi dispatch app to connect passengers with available drivers and manage ride requests efficiently.",
+  "name": "تكسي نابلس والمهندس",
+  "short_name": "تكسي نابلس والمهندس",
+  "description": "نظام إدارة مكتب تكسي نابلس والمهندس",
   "icons": [
     {
       "src": "/icons/icon-192x192.png",

@@ -61,9 +61,12 @@ public sealed class ReceptionTests
             Assert.Equal(HttpStatusCode.Conflict, (await a.PostAsJsonAsync("/api/v1/reception/calls", call with { Phone = "0591234567" })).StatusCode);
             await Body(await b.PostAsJsonAsync("/api/v1/reception/calls", call));
             var foreign = await Body(await b.GetAsync("/api/v1/reception/snapshot")); Assert.Equal(1, foreign["rides"]![0]!["orderNumber"]!.GetValue<int>());
-            ride["pickup"]!["name"] = "عنوان محفوظ"; ride["passengerName"] = "زبون المكتب"; ride["receptionPending"] = false; ride["status"] = "waiting";
+            ride["dropoff"] = new JsonObject { ["name"] = "الجامعة" }; ride["totalFare"] = 30; ride["pickup"]!["name"] = "عنوان محفوظ"; ride["passengerName"] = "زبون المكتب"; ride["receptionPending"] = false; ride["status"] = "waiting";
             var edited = await Body(await a.PutAsJsonAsync($"/api/v1/reception/rides/{id}", ride));
-            Assert.Equal(edited.ToJsonString(), (await Body(await a.PutAsJsonAsync($"/api/v1/reception/rides/{id}", ride))).ToJsonString());
+            var beforeReplay = await Body(await a.GetAsync("/api/v1/reception/snapshot"));
+            var replay = await Body(await a.PutAsJsonAsync($"/api/v1/reception/rides/{id}", ride));
+            Assert.Equal(edited["id"]!.GetValue<string>(), replay["id"]!.GetValue<string>());
+            Assert.True(JsonNode.DeepEquals(beforeReplay, await Body(await a.GetAsync("/api/v1/reception/snapshot"))));
             ride["notes"] = "stale overwrite";
             Assert.Equal(HttpStatusCode.Conflict, (await a.PutAsJsonAsync($"/api/v1/reception/rides/{id}", ride)).StatusCode);
             await Body(await a.PostAsJsonAsync("/api/v1/reception/calls", call));
@@ -83,20 +86,33 @@ public sealed class ReceptionTests
             snapshot = await Body(await a.GetAsync("/api/v1/reception/snapshot")); var shift = snapshot["shifts"]![0]!["id"]!.GetValue<string>();
             Assert.Equal(HttpStatusCode.NoContent, (await a.PostAsJsonAsync("/api/v1/reception/queue", new { type = "add", shiftId = shift })).StatusCode);
             Assert.Equal(HttpStatusCode.BadRequest, (await b.PostAsJsonAsync("/api/v1/reception/queue", new { type = "add", shiftId = shift })).StatusCode);
+            // Office map point is independent of fare and reaches the assigned driver unchanged.
+            edited["latitude"] = 32.226789; edited["longitude"] = 35.261234; edited["locationSource"] = "MAP_PIN";
             edited["status"] = "assigned"; edited["driverId"] = driver["id"]!.DeepClone(); edited["shiftId"] = shift;
             edited = await Body(await a.PutAsJsonAsync($"/api/v1/reception/rides/{id}", edited));
+            using var mapDriver = factory.CreateClient();
+            var mapLogin = await Body(await mapDriver.PostAsJsonAsync("/api/v1/auth/login", new { tenant = "reception-a", username = "driver", password = "Driver-reception-test!" }));
+            mapDriver.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", mapLogin["accessToken"]!.GetValue<string>());
+            var driverUpdate = await Body(await mapDriver.GetAsync("/api/v1/driver/updates"));
+            var received = driverUpdate["data"]!["rides"]!.AsArray().Single(r => r!["id"]!.GetValue<string>() == edited["backendRideId"]!.GetValue<string>())!;
+            Assert.Equal(32.226789, received["latitude"]!.GetValue<double>()); Assert.Equal(35.261234, received["longitude"]!.GetValue<double>());
             snapshot = await Body(await a.GetAsync("/api/v1/reception/snapshot")); Assert.Single(snapshot["queue"]!.AsArray());
             Assert.Equal("BUSY", snapshot["queue"]![0]!["status"]!.GetValue<string>()); // Assignment preserves the queue until an explicit office action.
             Assert.Equal(HttpStatusCode.Conflict, (await a.PostAsJsonAsync("/api/v1/reception/shifts/" + shift + "/end", new { })).StatusCode);
             Assert.Equal(HttpStatusCode.Conflict, (await a.PostAsJsonAsync("/api/v1/reception/queue", new { type = "add", shiftId = shift })).StatusCode);
             var pending = snapshot["rides"]!.AsArray()[1]!.DeepClone().AsObject();
-            pending["status"] = "assigned"; pending["driverId"] = driver["id"]!.DeepClone(); pending["shiftId"] = shift;
+            pending["dropoff"] = new JsonObject { ["name"] = "المستشفى" }; pending["status"] = "assigned"; pending["driverId"] = driver["id"]!.DeepClone(); pending["shiftId"] = shift;
             // Optional-address reception permits empty pickups; this assignment conflicts with the busy driver.
             Assert.Equal(HttpStatusCode.Conflict, (await a.PutAsJsonAsync("/api/v1/reception/rides/" + pending["id"]!.GetValue<string>(), pending)).StatusCode);
             pending["receptionPending"] = false; pending["pickup"]!["name"] = "Other";
             Assert.Equal(HttpStatusCode.Conflict, (await a.PutAsJsonAsync("/api/v1/reception/rides/" + pending["id"]!.GetValue<string>(), pending)).StatusCode);
-            edited["status"] = "completed";
-            await Body(await a.PutAsJsonAsync($"/api/v1/reception/rides/{id}", edited));
+            // Preserve the stable state machine: completion cannot jump from assigned.
+            foreach (var status in new[] { "driver-accepted", "driver-arriving", "arrived", "in-progress", "completed" })
+            {
+                edited["status"] = status;
+                edited = await Body(await a.PutAsJsonAsync($"/api/v1/reception/rides/{id}", edited));
+                Assert.Equal(32.226789, edited["latitude"]!.GetValue<double>()); Assert.Equal(35.261234, edited["longitude"]!.GetValue<double>());
+            }
             Assert.Equal(HttpStatusCode.NoContent, (await a.PostAsJsonAsync("/api/v1/reception/shifts/" + shift + "/end", new { })).StatusCode);
             var response = await a.GetAsync("/api/v1/reception/snapshot");
             using var conditional = new HttpRequestMessage(HttpMethod.Get, "/api/v1/reception/snapshot"); conditional.Headers.IfNoneMatch.Add(response.Headers.ETag!);

@@ -1,4 +1,4 @@
-param([string]$Phone = "0599000000")
+﻿param([string]$Phone = "0599000000")
 
 Add-Type -AssemblyName System.Windows.Forms
 

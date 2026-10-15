@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import type { Driver, Ride } from '@/lib/types';
 import { statusLabels } from "@/lib/ride-status";
-import { sourceLabels } from '@/lib/call-events';
+import { rideSourceLabels as sourceLabels } from '@/lib/ride-source';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { businessDay } from '@/lib/ride-numbering';

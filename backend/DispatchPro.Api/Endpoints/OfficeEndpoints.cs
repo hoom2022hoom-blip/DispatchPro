@@ -3,11 +3,13 @@ using DispatchPro.Api.Infrastructure;
 using DispatchPro.Api.Services;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json.Nodes;
+using Microsoft.AspNetCore.Identity;
 
 namespace DispatchPro.Api.Endpoints;
 public sealed record OfficeDriverInput(string FullName, string? Phone = null, bool? Active = null, DriverStatus Status = DriverStatus.Offline, string? NationalId = null, string? Address = null, DateOnly? DateOfBirth = null, string? LicenseNumber = null, string? LicenseType = null, DateOnly? LicenseIssueDate = null, DateOnly? LicenseExpiryDate = null, DateOnly? HireDate = null, string? Notes = null, Guid? CurrentVehicleId = null, bool UpdateVehicle = false, bool? IsActive = null, string? AssignmentNotes = null, string? PhoneLocal = null, string? WhatsappPhone = null, string? WhatsappCountryCode = null, bool? HasWhatsApp = null, bool? WhatsappEnabled = null);
-public sealed record OfficeVehicleInput(string Plate, Guid DriverId, Guid VehicleClassId, string Make, string Model, string Color, int? Year, bool Active, string Status);
+public sealed record OfficeVehicleInput(string Plate, Guid DriverId, Guid VehicleClassId, string Make, string Model, string Color, int? Year, bool Active, string Status, DateOnly? RegistrationExpiryDate = null, DateOnly? InsuranceExpiryDate = null);
 public sealed record OfficeMessagingInput(string OfficeWhatsAppNumber);
+public sealed record DriverAccountInput(string Username, bool Active, string? Password = null, bool GenerateTemporary = false);
 public sealed record OfficeQueueInput(Guid VehicleId);
 public sealed record QueueLocationInput(string Name, bool IsActive, int SortOrder);
 public static class OfficeEndpoints
@@ -15,15 +17,41 @@ public static class OfficeEndpoints
     public static void MapOfficeEndpoints(this WebApplication app)
     {
         var api = app.MapGroup("/api/v1/office").RequireAuthorization("rides.read");
-        api.MapGet("", async (TaxiDb db, ReceptionService reception) => new {
+        api.MapGet("", async (TaxiDb db, ReceptionService reception, AutoDispatch dispatch, TenantContext tenant, MobilePresence presence, VoiceRooms rooms) => new {
+            currentUser = await db.Set<User>().Where(u=>u.Id==tenant.ActorId).Select(u=>new {u.Username}).SingleOrDefaultAsync(),
             today = ReceptionService.Day(DateTimeOffset.UtcNow),
             officeWhatsAppNumber = await db.Set<Office>().Select(o => o.OfficeWhatsAppNumber).FirstOrDefaultAsync() ?? "",
             drivers = await db.Set<Driver>().AsNoTracking().OrderBy(d => d.FullName).ToListAsync(),
+            driverEligibility = await DriverEligibility.Read(db,reception,dispatch,presence,rooms),
             vehicles = await db.Set<Vehicle>().AsNoTracking().OrderBy(v => v.Plate).ToListAsync(),
             classes = await db.Set<VehicleClass>().AsNoTracking().OrderBy(v => v.Name).ToListAsync(),
             reception = await reception.Snapshot(),
             calls = (await reception.RecentCalls(8)).Select(c => JsonNode.Parse(c.Payload))
         });
+        api.MapPut("/drivers/{id:guid}/account", async (Guid id, DriverAccountInput input, TaxiDb db, TenantContext tenant, ReceptionService service, VoiceRooms rooms, VoiceEvents signal) => {
+            if(string.IsNullOrWhiteSpace(input.Username)||input.Username.Length>100||input.Password is not null&&(input.Password.Length<8||input.Password.Length>512))return Results.BadRequest(new {detail="اسم مستخدم صالح وكلمة مرور جديدة من 8 أحرف على الأقل"});
+            await using var tx=await db.Database.BeginTransactionAsync();await service.Lock();
+            var driver=await db.Set<Driver>().SingleOrDefaultAsync(d=>d.Id==id);if(driver is null)return Results.NotFound();
+            await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtext({driver.UserId.ToString()}))");
+            var user=await db.Set<User>().SingleOrDefaultAsync(u=>u.Id==driver.UserId);if(user is null)return Results.Conflict(new {detail="حساب السائق المرتبط غير موجود"});
+            if(!await db.Set<Role>().AnyAsync(r=>r.Id==user.RoleId&&r.Name=="Driver"))return Results.Conflict(new {detail="الحساب المرتبط لا يملك دور السائق؛ راجع ربط الحساب"});
+            var username=input.Username.Trim();
+            if(await db.Set<User>().AnyAsync(u=>u.Id!=user.Id&&u.Username==username))return Results.Conflict(new {detail="اسم المستخدم مستخدم بالفعل"});
+            if(input.GenerateTemporary&&input.Password is not null)return Results.BadRequest();
+            var temporaryPassword=input.GenerateTemporary ? Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(10)) : null;
+            var newPassword=temporaryPassword??input.Password;
+            if(input.Active&&string.IsNullOrEmpty(user.PasswordHash)&&newPassword is null)return Results.BadRequest(new {detail="عيّن كلمة مرور للحساب أولًا"});
+            user.Username=username;user.Active=input.Active;
+            if(newPassword is not null)user.PasswordHash=new PasswordHasher<User>().HashPassword(user,newPassword);
+            if(newPassword is not null||!input.Active) {
+                var sessions=await db.Set<AuditLog>().Where(a=>a.EntityId==user.Id&&a.Action=="office.session.created"&&!db.Set<AuditLog>().Any(r=>r.EntityId==a.Id&&r.Action=="office.session.revoked")).Select(a=>a.Id).ToListAsync();
+                foreach(var session in sessions)db.Add(new AuditLog{ActorId=tenant.ActorId,EntityId=session,Action="office.session.revoked",Detail="ACCOUNT_RESET"});
+            }
+            db.Add(new AuditLog {ActorId=tenant.ActorId,EntityId=driver.Id,Action=newPassword is null?"driver.account-updated":"driver.account-password-reset"});
+            await db.SaveChangesAsync();await tx.CommitAsync();
+            if(newPassword is not null||!input.Active){rooms.Revoke(tenant.TenantId,id);signal.Publish(tenant.TenantId);}
+            return Results.Ok(new {user.Username,user.Active,temporaryPassword});
+        }).RequireAuthorization("users.write");
         api.MapPut("/messaging-settings", async (OfficeMessagingInput input, TaxiDb db, TenantContext tenant, ReceptionService service) => {
             var number = input.OfficeWhatsAppNumber?.Trim() ?? "";
             if (number != "" && !System.Text.RegularExpressions.Regex.IsMatch(number, @"^[+](970|972)[1-9][0-9]{7,8}$")) return Results.BadRequest(new { detail = "أدخل رقم المكتب الدولي +970 أو +972" });
@@ -46,7 +74,7 @@ public static class OfficeEndpoints
         api.MapPost("/queue-locations", (QueueLocationInput input, TaxiDb db, TenantContext tenant, ReceptionService service) => SaveLocation(null, input, db, tenant, service)).RequireAuthorization("rides.write");
         api.MapPut("/queue-locations/{id:guid}", (Guid id, QueueLocationInput input, TaxiDb db, TenantContext tenant, ReceptionService service) => SaveLocation(id, input, db, tenant, service)).RequireAuthorization("rides.write");
         api.MapPost("/drivers/{id:guid}/queue", async (Guid id, OfficeQueueInput input, TaxiDb db, ReceptionService service) => {
-            if (!await db.Set<Driver>().AnyAsync(d => d.Id == id && d.Active && d.Status != DriverStatus.Busy && d.Status != DriverStatus.Suspended) || !await db.Set<Vehicle>().AnyAsync(v => v.Id == input.VehicleId && v.DriverId == id && v.Active && v.Status == "ACTIVE")) return Results.BadRequest();
+            if (!await db.Set<Driver>().AnyAsync(d => d.Id == id && d.Active && d.DriverAppEnabled && d.Status != DriverStatus.Busy && d.Status != DriverStatus.Suspended) || !await db.Set<Vehicle>().AnyAsync(v => v.Id == input.VehicleId && v.DriverId == id && v.Active && v.Status == "ACTIVE")) return Results.BadRequest();
             var shift = await db.Set<ReceptionShift>().SingleOrDefaultAsync(s => s.DriverId == id && s.Active);
             if (shift is null) { await service.StartShift(id, input.VehicleId); shift = await db.Set<ReceptionShift>().SingleAsync(s => s.DriverId == id && s.Active); }
             if (shift.VehicleId != input.VehicleId) return Results.Conflict();
@@ -97,6 +125,7 @@ public static class OfficeEndpoints
         if (id.HasValue && (row.DriverId != input.DriverId || !input.Active || input.Status != "ACTIVE") && await db.Set<ReceptionShift>().AnyAsync(s => s.VehicleId == id && s.Active)) return Results.Conflict(new { detail = "أنه الوردية قبل تغيير الربط أو تعطيل السيارة" });
         var changedDriver = !id.HasValue || row.DriverId != input.DriverId;
         row.Plate = input.Plate.Trim(); row.DriverId = input.DriverId; row.VehicleClassId = input.VehicleClassId; row.Make = input.Make.Trim(); row.Model = input.Model.Trim(); row.Color = input.Color.Trim(); row.Year = input.Year; row.Active = input.Active; row.Status = input.Status;
+        row.RegistrationExpiryDate = input.RegistrationExpiryDate; row.InsuranceExpiryDate = input.InsuranceExpiryDate;
         if (!id.HasValue) db.Add(row);
         await db.SaveChangesAsync();
         if (changedDriver) await new DriverOperations(db, tenant, service).Assign(await db.Set<Driver>().SingleAsync(d => d.Id == input.DriverId), row.Id, "تحديث ربط السيارة من إدارة السيارات");

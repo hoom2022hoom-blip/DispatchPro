@@ -49,7 +49,7 @@ export function OfficeAdministration(){
    <div className="flex gap-3"><button className={button} disabled={page===1||loading} onClick={()=>setPage(p=>p-1)}>السابق</button><span>صفحة {page}</span><button className={button} disabled={page*50>=total||loading} onClick={()=>setPage(p=>p+1)}>التالي</button></div>
    <form className="max-w-lg space-y-3 rounded border p-4" onSubmit={e=>{e.preventDefault();void save(async()=>{if(user)await api.administration(`administration/users/${user.id}`,'PUT',{roleId,active});else await api.administration('users','POST',{username,password,roleId});editUser(null);});}}>
     <h2>{user?'تعديل المستخدم':'إضافة مستخدم'}</h2><label>اسم المستخدم<input required maxLength={100} disabled={!!user} className={input} value={username} onChange={e=>setUsername(e.target.value)}/></label>
-    {!user&&<label>كلمة المرور (14 حرفًا على الأقل)<input required minLength={14} maxLength={512} type="password" autoComplete="new-password" className={input} value={password} onChange={e=>setPassword(e.target.value)}/></label>}
+    {!user&&<label>كلمة المرور (8 أحرف على الأقل)<input required minLength={8} maxLength={512} type="password" autoComplete="new-password" className={input} value={password} onChange={e=>setPassword(e.target.value)}/></label>}
     <label>الدور<select required className={input} value={roleId} onChange={e=>setRoleId(e.target.value)}><option value="">اختر الدور</option>{roles.map(r=><option key={r.id} value={r.id}>{r.name}</option>)}</select></label>
     {user&&<label><input type="checkbox" checked={active} onChange={e=>setActive(e.target.checked)}/> حساب نشط</label>}<button disabled={busy} className={button}>حفظ المستخدم</button>
    </form>

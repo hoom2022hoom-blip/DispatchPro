@@ -5,22 +5,26 @@ const react=JSON.stringify(import.meta.resolve('react'));
 const rhf=JSON.stringify(import.meta.resolve('react-hook-form'));
 export function receptionRenderHooks(){
  const stubs={
+  '/components/map-attribution-portal':`export const MapAttributionPortal=()=>null;`,
+  '/hooks/use-office-auth':`import {apiReceptionBackend as api} from '@/lib/reception-api';import {useOfficeAuth as realHook} from ${JSON.stringify(new URL('../../src/hooks/use-office-auth.ts',import.meta.url).href)};const fixture={authReady:true,authenticated:true,tenant:'test'};export const useOfficeAuth=()=>api.authSnapshot?realHook():fixture;`,
   '/components/ui/button':`export const Button='button';`,
   '/components/ui/input':`import React from ${react};export const Input=React.forwardRef((p,r)=>React.createElement('input',{...p,ref:r}));`,
   '/components/ui/textarea':`import React from ${react};export const Textarea=React.forwardRef((p,r)=>React.createElement('textarea',{...p,ref:r}));`,
   '/components/ui/checkbox':`export const Checkbox='input';`,
   '/components/ui/form':`export {FormProvider as Form,Controller as FormField} from ${rhf};export const FormControl='div',FormItem='div',FormLabel='label';export const FormMessage=()=>null;`,
   '/components/ui/popover':`export const Popover='div',PopoverContent='section',PopoverTrigger='div';`,
+  '/components/ui/dialog':`export const Dialog=p=>p.open?p.children:null;export const DialogContent='dialog-content',DialogTitle='h2',DialogDescription='p';`,
   '/components/responsive-dialog':`import React from ${react};export function ResponsiveDialog(p){return p.open?React.createElement('section',{'aria-label':p.title},p.children):null;}`,
   '/components/office-reception-table':`export const OfficeReceptionTable='reception-table';`,
   '/components/reception-footer':`export const ReceptionFooter=()=>null;`,
   '/components/office-workspace':`export const useOffice=()=>({});`,
+  '/components/office-live-notifications':`export const OfficeLiveNotifications='office-notifications';`,
   '/components/reception-edit-form':`export const ReceptionEditForm=()=>null;`,
   '/components/strict-mode-droppable':`export const StrictModeDroppable=p=>p.children({innerRef:()=>{},droppableProps:{},placeholder:null});`,
  };
  const stub=source=>({url:'data:text/javascript,'+encodeURIComponent(source),shortCircuit:true});
  return registerHooks({resolve(s,c,next){
-  if(s==='next/navigation')return stub(`const params=new URLSearchParams();export const useSearchParams=()=>params;`);
+  if(s==='next/navigation')return stub(`const params=new URLSearchParams();export const useSearchParams=()=>params;export const useRouter=()=>({push:path=>globalThis.topBarNavigation?.(path)});`);
   if(s==='next/dynamic')return stub('export default ()=>()=>null;');
   if(s==='@hello-pangea/dnd')return stub(`export const DragDropContext=p=>p.children;export const Draggable=p=>p.children({innerRef:()=>{},draggableProps:{},dragHandleProps:{}});`);
   let url;

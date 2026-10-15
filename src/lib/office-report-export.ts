@@ -1,5 +1,12 @@
-export const reportColumns=['العدد','التاريخ والوقت','الزبون','الهاتف','العنوان','الحالة','المصدر'];
-export function reportCells(row:Record<string,unknown>):string[]{return [row.orderNumber,row.createdAt,row.passengerName,row.passengerPhone,row.addressText??(row.pickup as {name?:string}|undefined)?.name,row.status,row.source].map(v=>v==null?'':String(v));}
+export const reportStatusLabels:Record<string,string>={pending:'بانتظار سائق',waiting:'انتظار',assigned:'تم الإرسال','driver-accepted':'مقبول','driver-arriving':'في الطريق',arrived:'وصل','in-progress':'الرحلة جارية',completed:'مكتمل',cancelled:'ملغي',active:'نشط'};
+export const reportSourceLabels:Record<string,string>={DRIVER_STREET:'راكب أو طلب من الشارع',MANUAL:'المكتب',CUSTOMER_APP:'تطبيق الزبون',WHATSAPP:'واتساب',LANDLINE_ICALL:'الهاتف الأرضي',LANDLINE:'الهاتف الأرضي'};
+export const reportFareLabels:Record<string,string>={OFFICE_MANUAL:'المكتب',OFFICE_OVERRIDE:'المكتب',DRIVER_MANUAL:'السائق',GPS_METER:'GPS'};
+export function reportDate(value:unknown):string{if(!value)return '';const date=new Date(String(value));return Number.isNaN(date.getTime())?'':new Intl.DateTimeFormat('ar-PS',{timeZone:'Asia/Jerusalem',day:'2-digit',month:'2-digit',year:'numeric',hour:'numeric',minute:'2-digit'}).format(date);}
+const label=(labels:Record<string,string>,value:unknown)=>labels[String(value)]??'غير محدد';
+export const orderColumns=['رقم الطلب','التاريخ والوقت','الزبون','الهاتف','العنوان','الوجهة','السائق','الحالة','السعر','مصدر السعر'];
+export function orderCells(row:Record<string,unknown>):string[]{const fare=row.finalFare??(Number(row.totalFare)>0?row.totalFare:null);return [row.orderNumber??row.id,reportDate(row.createdAt),row.passengerName,row.passengerPhone,row.addressText??(row.pickup as {name?:string}|undefined)?.name,(row.dropoff as {name?:string}|undefined)?.name||row.destination,row.driverName,label(reportStatusLabels,row.status),fare!=null?`${fare} ${!row.currency||row.currency==='ILS'?'شيكل':row.currency}`:'لم يحدد بعد',fare!=null?label(reportFareLabels,row.fareSource??'OFFICE_MANUAL'):'—'].map(v=>v==null?'':String(v));}
+export const reportColumns=[...orderColumns,'مصدر الطلب','وقت القبول','في الطريق','وقت الوصول','بدء الرحلة','إنهاء الرحلة','ملاحظات','المسافة (كم)','المدة (ثانية)','طريقة التسعير','سعر العداد'];
+export function reportCells(row:Record<string,unknown>):string[]{return [...orderCells(row),label(reportSourceLabels,row.source),reportDate(row.acceptedAt),reportDate(row.arrivingAt),reportDate(row.arrivedAt),reportDate(row.startedAt),reportDate(row.completedAt),row.notes,row.distanceKm,row.durationSeconds,label(reportFareLabels,row.fareMode),row.meterCalculatedFare].map(v=>v==null?'':String(v));}
 export function reportCsv(rows:Record<string,unknown>[]):string{
  const cell=(v:string)=>'"'+(/^\s*[=+\-@\t\r]/.test(v)?"'"+v:v).replace(/"/g,'""')+'"';
  return '\uFEFF'+[reportColumns,...rows.map(reportCells)].map(r=>r.map(cell).join(',')).join('\r\n');

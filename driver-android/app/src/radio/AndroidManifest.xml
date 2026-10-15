@@ -1,0 +1,19 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE"/>
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <application>
+        <activity android:name="com.dispatchpro.driver.RadioActivity" android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"/>
+        <service android:name="com.dispatchpro.driver.RadioService" android:exported="false" android:stopWithTask="false" android:foregroundServiceType="mediaPlayback|location|microphone"/>
+        <service android:name="com.dispatchpro.driver.RadioKeyAccess" android:label="@string/radio_keys_label" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE" android:exported="true">
+            <intent-filter><action android:name="android.accessibilityservice.AccessibilityService"/></intent-filter>
+            <meta-data android:name="android.accessibilityservice" android:resource="@xml/radio_keys"/>
+        </service>
+        <receiver android:name="com.dispatchpro.driver.RadioBootReceiver" android:exported="false">
+            <intent-filter><action android:name="android.intent.action.BOOT_COMPLETED"/><action android:name="android.intent.action.USER_UNLOCKED"/></intent-filter>
+        </receiver>
+    </application>
+</manifest>

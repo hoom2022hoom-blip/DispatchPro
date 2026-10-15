@@ -1,0 +1,17 @@
+/* Shared mobile calling UI. Arabic text and system text scaling remain readable. */
+dialog.ride-call{box-sizing:border-box;width:min(100% - 24px,440px);max-height:calc(100dvh - 32px);padding:32px 24px;border:1px solid var(--taxi-border,#cbd5e1);border-radius:28px;background:var(--taxi-card,#fff);color:var(--taxi-ink,#172033);box-shadow:0 24px 80px #0004;text-align:center;overflow:auto;}
+dialog.ride-call::backdrop{background:#0f172acc;}
+.ride-call-avatar{display:grid;place-items:center;width:88px;height:88px;margin:0 auto 20px;border-radius:50%;background:#fff5cf;color:#725000;border:2px solid #e0b329;}
+.ride-call-avatar svg{width:40px;height:40px;fill:none;stroke:currentColor;stroke-width:1.8;}
+.ride-call-name{font-size:clamp(22px,6vw,30px);line-height:1.5;overflow-wrap:anywhere;margin:8px 0;}
+.ride-call-brand{font-size:13px;color:var(--taxi-muted,#475569);}.ride-call-state{min-height:24px;line-height:1.6;color:var(--taxi-ink,#172033);}.ride-call-duration{font-variant-numeric:tabular-nums;direction:ltr;font-size:24px;min-height:32px;}
+dialog.ride-call button{min-height:52px;min-width:48px;margin:4px;padding:12px 16px;border-radius:16px;border:1px solid var(--taxi-border,#cbd5e1);background:var(--taxi-card,#fff);color:var(--taxi-ink,#172033);font:inherit;cursor:pointer;transition:background-color .15s,opacity .15s;}
+dialog.ride-call button:active{opacity:.75;}dialog.ride-call button:focus-visible{outline:3px solid #2563eb;outline-offset:3px;}dialog.ride-call button:disabled{opacity:.5;cursor:wait;}
+dialog.ride-call button[aria-pressed=true]{background:#fff5cf;color:#634400;border-color:#c79a18;}
+dialog.ride-call .ride-call-answer{background:#11633a;color:white;border-color:#11633a;min-width:112px;}dialog.ride-call .ride-call-end{background:#b42332;color:white;border-color:#b42332;min-width:112px;}
+.ride-call.ringing .ride-call-avatar{animation:call-breathe 1.8s ease-in-out infinite;}
+@keyframes call-breathe{50%{box-shadow:0 0 0 10px #e0b32922;}}
+@media(prefers-reduced-motion:reduce){.ride-call.ringing .ride-call-avatar{animation:none;}dialog.ride-call button{transition:none;}}
+@media(max-height:480px){dialog.ride-call{padding:16px 24px;}.ride-call-avatar{width:56px;height:56px;margin-bottom:8px;}.ride-call-name{margin:4px 0;}.ride-call-duration{margin:4px;}}
+.ride-call-minibar{position:fixed;top:calc(env(safe-area-inset-top) + 72px);inset-inline:12px;z-index:45;max-width:536px;margin-inline:auto;min-height:48px;padding:10px 16px;border:1px solid #287754;border-radius:14px;background:#11633a;color:white;box-shadow:0 4px 16px #0003;font:inherit;font-size:14px;cursor:pointer;}
+.ride-call-minibar:focus-visible{outline:3px solid #2563eb;outline-offset:3px;}

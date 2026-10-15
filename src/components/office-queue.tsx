@@ -27,6 +27,9 @@ export function OfficeQueuePanel({ data, refresh, embedded = false, queueId = 'd
   useEffect(()=>{if(sizesLoaded)try{localStorage.setItem(sizeKey,JSON.stringify({columns,width:panelWidth}));}catch{}},[columns,panelWidth,sizesLoaded]);
   const resize=(event:React.PointerEvent<HTMLElement>)=>{const active=sizing.current;if(!active)return;const width=active.width+(active.index===-1?event.clientX-active.start:active.start-event.clientX);if(active.index===-1)setPanelWidth(Math.max(240,Math.min(640,width)));else setColumns(old=>old.map((v,i)=>i===active.index?Math.max([24,60,50,42][i],Math.min([45,300,240,100][i],width)):v));};
   const gridStyle={gridTemplateColumns:columns.map(v=>v+'px').join(' '),minWidth:columns.reduce((a,b)=>a+b,0)+28};
+  const mutationLock=useRef(false);
+  const [highlight,setHighlight]=useState(0);
+  const locationSelect=useRef<HTMLSelectElement>(null);
   const [search, setSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [selectedDriver, setSelectedDriver] = useState('');
@@ -43,14 +46,15 @@ export function OfficeQueuePanel({ data, refresh, embedded = false, queueId = 'd
     const plate = data.vehicles.find(vehicle => vehicle.id === driver.currentVehicleId)?.plate ?? '';
     return `${driver.fullName} ${driver.phoneLocal ?? driver.phone} ${plate}`.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase());
   }), [data, search, entries]);
+  useEffect(()=>{if(selectedDriver)locationSelect.current?.focus();},[selectedDriver]);
   const selectedEntry = entries.find(entry => entry.driverId === selectedQueueDriver);
   const selectedPosition = selectedEntry?.position ?? 0;
   const run = async (fn: () => Promise<void>) => {
-    if (pending) return;
+    if (mutationLock.current) return;mutationLock.current=true;
     setPending(true); setError('');
     try { await fn(); await refresh(); }
     catch (failure) { setError((failure as Error).message); }
-    finally { setPending(false); }
+    finally { mutationLock.current=false;setPending(false); }
   };
   const chooseDriver = (id: string) => { setSelectedDriver(id); setSearch(''); setSearchOpen(false); setNewLocation(''); };
   const addDriver = () => void run(async () => {
@@ -82,13 +86,13 @@ export function OfficeQueuePanel({ data, refresh, embedded = false, queueId = 'd
       </select>
     </div>}
     <div className="relative space-y-2">
-      <Input aria-label="بحث السائقين للدور" placeholder="ابحث بالاسم أو الهاتف أو اللوحة" value={selectedDriver ? data.drivers.find(driver => driver.id === selectedDriver)?.fullName ?? '' : search} disabled={pending} onFocus={() => setSearchOpen(true)} onChange={event => { setSelectedDriver(''); setSearch(event.target.value); setSearchOpen(true); }} onKeyDown={event => { if (event.key === 'Escape') setSearchOpen(false); }} />
-      {searchOpen && <div role="listbox" aria-label="السائقون المتاحون" className="absolute inset-x-0 top-full z-20 max-h-48 overflow-y-auto rounded border bg-white shadow-lg">
+      <Input role="combobox" aria-expanded={searchOpen} aria-controls={`${queueId}-options`} aria-activedescendant={searchOpen&&drivers[highlight]?`${queueId}-option-${highlight}`:undefined} aria-label="بحث السائقين للدور" placeholder="ابحث بالاسم أو الهاتف أو اللوحة" value={selectedDriver ? data.drivers.find(driver => driver.id === selectedDriver)?.fullName ?? '' : search} disabled={pending} onFocus={() => setSearchOpen(true)} onChange={event => { setSelectedDriver(''); setSearch(event.target.value);setHighlight(0); setSearchOpen(true); }} onKeyDown={event => { if(event.key==='Escape'){event.preventDefault();event.stopPropagation();setSearchOpen(false);}else if(event.key==='ArrowDown'||event.key==='ArrowUp'){event.preventDefault();setSearchOpen(true);setHighlight(i=>Math.max(0,Math.min(drivers.length-1,i+(event.key==='ArrowDown'?1:-1))));}else if(event.key==='Enter'&&searchOpen){event.preventDefault();if(!event.repeat&&drivers[highlight])chooseDriver(drivers[highlight].id);}else if(event.key==='Tab')setSearchOpen(false); }} />
+      {searchOpen && <div id={`${queueId}-options`} role="listbox" aria-label="السائقون المتاحون" className="absolute inset-x-0 top-full z-20 max-h-48 overflow-y-auto rounded border bg-white shadow-lg">
         <div className="sticky top-0 flex justify-end bg-white px-1"><button type="button" aria-label="إغلاق بحث السائقين" className="h-5 w-5 text-xs text-slate-500" onClick={() => setSearchOpen(false)}>X</button></div>
-        {drivers.length ? drivers.map(driver => <button type="button" role="option" aria-selected={selectedDriver === driver.id} key={driver.id} className="block min-h-10 w-full px-3 text-right text-sm hover:bg-slate-100" onMouseDown={event => event.preventDefault()} onClick={() => chooseDriver(driver.id)}>{driver.fullName} · {driver.phoneLocal || driver.phone || '—'} · {data.vehicles.find(vehicle => vehicle.id === driver.currentVehicleId)?.plate ?? '—'}</button>) : <p className="p-3 text-sm text-slate-500">لا يوجد سائق مطابق</p>}
+        {drivers.length ? drivers.map((driver,index) => <button type="button" role="option" id={`${queueId}-option-${index}`} tabIndex={-1} aria-selected={highlight === index} key={driver.id} className={`block min-h-10 w-full px-3 text-right text-sm hover:bg-slate-100 ${highlight===index?'bg-blue-50 ring-2 ring-inset ring-blue-600':''}`} onMouseDown={event => event.preventDefault()} onClick={() => chooseDriver(driver.id)}>{driver.fullName} · {driver.phoneLocal || driver.phone || '—'} · {data.vehicles.find(vehicle => vehicle.id === driver.currentVehicleId)?.plate ?? '—'}</button>) : <p className="p-3 text-sm text-slate-500">لا يوجد سائق مطابق</p>}
       </div>}
       {selectedDriver && <>
-        <select aria-label="موقع السائق" className="h-9 w-full rounded border bg-white px-2 text-sm" required disabled={pending} value={newLocation} onChange={event => setNewLocation(event.target.value)}>
+        <select ref={locationSelect} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();if(!event.repeat)(event.currentTarget.nextElementSibling as HTMLButtonElement|null)?.focus();}}} aria-label="موقع السائق" className="h-9 w-full rounded border bg-white px-2 text-sm" required disabled={pending} value={newLocation} onChange={event => setNewLocation(event.target.value)}>
           <option value="">اختر الموقع</option>{activeLocations.map(location => <option key={location.id} value={location.id}>{location.name}</option>)}
         </select>
         <Button type="button" className="w-full" disabled={pending || !newLocation || entries.some(entry => entry.driverId === selectedDriver)} onClick={addDriver}>إضافة للدور</Button>
@@ -101,8 +105,8 @@ export function OfficeQueuePanel({ data, refresh, embedded = false, queueId = 'd
       {entries.map((entry, index) => {
         const driver = data.drivers.find(item => item.id === entry.driverId);
         const selected = entry.driverId === selectedQueueDriver;
-        return <Draggable key={entry.driverId} draggableId={`${queueId==='driver-queue'?'queue':'queue-floating'}:${entry.driverId}`} index={index} isDragDisabled={pending}>{(drag,snapshot) => <div ref={drag.innerRef} {...drag.draggableProps} {...drag.dragHandleProps} style={{...gridStyle,...drag.draggableProps.style,opacity:snapshot?.isDragging?0.7:1}} role="button" tabIndex={0} aria-pressed={selected} aria-label={`اختيار ${driver?.fullName ?? 'سائق'}`} onClick={() => setSelectedQueueDriver(entry.driverId ?? '')} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedQueueDriver(entry.driverId ?? ''); } }} className={`grid h-7 cursor-pointer  items-center gap-1 rounded border px-2 text-xs ${selected ? 'border-blue-600 bg-blue-50 ring-1 ring-blue-400' : 'bg-slate-50 hover:bg-slate-100'}`}>
-          <span className="font-bold">{entry.position}</span><span className="truncate text-sm">{driver?.fullName ?? '—'}</span><span className="truncate">{locations.find(location => location.id === entry.queueLocationId)?.name ?? '—'}</span><time>{receptionTime(entry.enteredAt ?? entry.joinedAt)}</time>
+        return <Draggable key={entry.driverId} draggableId={`${queueId==='driver-queue'?'queue':'queue-floating'}:${entry.driverId}`} index={index} isDragDisabled={pending}>{(drag,snapshot) => <div ref={drag.innerRef} {...drag.draggableProps} {...drag.dragHandleProps} style={{...gridStyle,...drag.draggableProps.style,opacity:snapshot?.isDragging?0.7:1}} role="button" tabIndex={0} aria-pressed={selected} aria-label={`اختيار ${driver?.fullName ?? 'سائق'}`} onClick={() => setSelectedQueueDriver(entry.driverId ?? '')} onKeyDown={event => { if(event.key==='ArrowDown'||event.key==='ArrowUp'){event.preventDefault();const rows=Array.from(event.currentTarget.parentElement?.querySelectorAll<HTMLElement>('[role="button"]')??[]);rows[index+(event.key==='ArrowDown'?1:-1)]?.focus();return;}if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedQueueDriver(entry.driverId ?? ''); } }} className={`grid h-9 cursor-pointer  items-center gap-1 rounded border px-2 text-xs ${selected ? 'border-blue-600 bg-blue-50 ring-1 ring-blue-400' : 'bg-slate-50 hover:bg-slate-100'}`}>
+          <span className="font-bold">{entry.position}</span><span className="truncate text-sm" title={driver ? ({AVAILABLE:'متاح',BUSY:'مشغول',OFFLINE:'غير متصل',SUSPENDED:'موقوف'}[officeDriverStatus(driver,data)]) : 'غير متاح'}>{driver?.fullName ?? '—'}<small className="block truncate text-[10px] leading-3 text-slate-500">{driver ? ({AVAILABLE:'متاح',BUSY:'مشغول',OFFLINE:'غير متصل',SUSPENDED:'موقوف'}[officeDriverStatus(driver,data)]) : 'غير متاح'}</small></span><span className="truncate">{locations.find(location => location.id === entry.queueLocationId)?.name ?? '—'}</span><time>{receptionTime(entry.enteredAt ?? entry.joinedAt)}</time>
         </div>}</Draggable>;
       })}
       {provided.placeholder}{!entries.length && <p className="p-5 text-center text-sm text-slate-500">الدور فارغ</p>}

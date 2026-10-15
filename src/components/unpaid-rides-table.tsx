@@ -94,7 +94,7 @@ export function UnpaidRidesTable() {
     return rides
       .map(ride => {
         const paymentTotal = (ride.paymentDetails?.cash || 0) + (ride.paymentDetails?.card || 0) + (ride.paymentDetails?.check || 0);
-        const amountOwed = ride.totalFare - paymentTotal;
+        const amountOwed = (ride.totalFare ?? 0) - paymentTotal;
         return { ...ride, amountOwed };
       })
       .filter(ride => ride.amountOwed > 0.01 || ride.tags?.includes('UNPAID')) // Use epsilon and check for UNPAID tag
@@ -207,7 +207,7 @@ export function UnpaidRidesTable() {
               <TableCell>{ride.droppedOffAt && isValid(ride.droppedOffAt) ? format(ride.droppedOffAt, 'PP') : 'N/A'}</TableCell>
               <TableCell>{formatPhoneNumber(ride.passengerPhone)}</TableCell>
               <TableCell>{getDriverName(ride.driverId)}</TableCell>
-              <TableCell>{formatCurrency(ride.totalFare)}</TableCell>
+              <TableCell>{formatCurrency(ride.totalFare ?? 0)}</TableCell>
               <TableCell>
                 <Badge variant="destructive">{formatCurrency(ride.amountOwed)}</Badge>
               </TableCell>

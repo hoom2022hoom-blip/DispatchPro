@@ -1,0 +1,16 @@
+{
+  "apiUrl": "https://api.nablustaxi.com",
+  "bindAddress": "0.0.0.0",
+  "udpPort": 3520,
+  "healthPort": 9007,
+  "stateDirectory": "../.dispatchpro-local/central-icall",
+  "sources": [
+    {
+      "id": "office-caller-id",
+      "sourceIp": "192.168.0.90",
+      "tenant": "REPLACE_WITH_EXISTING_OFFICE_SLUG",
+      "tenantId": "00000000-0000-0000-0000-000000000000",
+      "credentialsFile": "../.dispatchpro-local/central-icall.credentials.json"
+    }
+  ]
+}

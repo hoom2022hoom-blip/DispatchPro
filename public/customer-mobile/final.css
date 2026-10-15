@@ -1,0 +1,82 @@
+/* The real map and live booking controls share a compact mobile surface. */
+body>main{padding:env(safe-area-inset-top) env(safe-area-inset-right) calc(88px + env(safe-area-inset-bottom)) env(safe-area-inset-left);min-height:100dvh}
+main>header{position:relative;min-height:64px;padding:8px 16px;margin:0;flex-wrap:nowrap}
+header .brand-mark{width:44px;height:44px;border-radius:50%}
+header .brand{max-width:160px;font-size:13px}
+header button.quiet{background:transparent;border:0;padding:10px;min-width:48px;min-height:48px}
+#connection{position:fixed;top:calc(64px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:40;max-width:calc(100% - 32px);width:max-content;background:#fff3da;color:#7a4300;border:1px solid #e7c891;font-size:13px;padding:10px 16px;box-shadow:0 4px 16px #0001}
+.home-greeting{padding:8px 22px 12px}.home-greeting h1{font-size:30px;font-weight:900;line-height:1.4;margin:2px 0;color:var(--taxi-ink)}
+#account #request-panel #journey-map .map-stage,#account #request-panel #journey-map #home-map{height:clamp(210px,31dvh,330px)!important;min-height:210px!important;max-height:none;border-radius:0}
+#journey-map .map-fit{bottom:28px!important;top:auto;left:16px!important;right:auto!important;inset-inline-end:auto;width:48px!important;min-width:48px;min-height:48px;padding:10px;border-radius:50%}
+#ride-form{gap:8px;margin:-18px 12px 0;padding:16px;border:0;border-radius:24px;box-shadow:0 -3px 16px #0000000a,0 6px 24px #0000000a}
+#ride-form label{margin:0;font-size:12px;font-weight:600;color:var(--taxi-muted)}
+#ride-form input{margin:3px 0 0;min-height:48px;height:48px;padding:10px 12px;font-size:16px;border-radius:12px;background:var(--taxi-bg)}
+.pickup-field{display:grid;grid-template-columns:minmax(0,1fr) 48px 48px;gap:8px;align-items:end}.pickup-field label{min-width:0}
+.location-actions{display:contents}.location-actions button{min-width:48px;min-height:48px;height:48px;padding:10px;margin:0!important;flex:none;border-radius:12px}
+.destination-field{display:grid;grid-template-columns:minmax(0,1fr) 48px;gap:0 8px;align-items:center}.destination-field label{grid-column:1/-1}.destination-field input{grid-column:1}.destination-field #pick-destination{grid-column:2;grid-row:2;min-height:48px;height:48px;padding:10px;margin:3px 0 0;border-radius:12px}
+.destination-field #destination-results{grid-column:1/-1}.destination-field #close-destination-suggestions{grid-column:2;grid-row:1;min-height:28px;padding:0;background:transparent;border:0}
+#pickup-results:empty,#destination-results:empty,#destination-error:empty{display:none}
+#gps-note{margin:0;line-height:1.5;font-size:12px;min-height:0}
+.home-quick-places button{min-height:56px!important;background:var(--taxi-card);color:var(--taxi-ink);border:1px solid var(--taxi-border)}
+#booking-options>summary{min-height:36px;padding-block:8px;color:var(--taxi-muted)}
+#request-ride{min-height:54px;border-radius:16px;font-size:19px;margin:0!important;order:1}
+#ride-form #booking-options{order:2}
+#saved-shortcuts,#suggested-shortcuts,#saved-place-tools{padding:8px 20px;margin:0}
+#saved-shortcuts h3,#suggested-shortcuts h3{font-size:13px;margin:4px 0 8px}
+.place-chips{display:flex;flex-wrap:nowrap;gap:8px;overflow-x:auto;padding-bottom:4px}.place-chips button{flex-shrink:0;min-height:48px;padding:8px 12px;border-radius:12px!important;font-size:13px}
+.customer-navigation{padding:6px 12px max(6px,env(safe-area-inset-bottom));z-index:30}
+.customer-navigation button{display:flex;flex-direction:column;gap:4px;min-height:56px;font-size:12px;padding:6px;border:0!important}
+.customer-navigation button.active{background:transparent!important;box-shadow:inset 0 3px #ffcb05}.customer-navigation button.active .ui-icon{color:#a06e00}
+#journey-status{font-size:22px;padding:16px}#journey-status p{font-size:14px;margin:8px 0}#journey-status button{min-height:48px;font-size:14px}
+.has-active-ride .home-greeting{display:none}#request-panel.has-active-ride .map-stage,#request-panel.has-active-ride #home-map{height:40dvh!important;min-height:250px!important}
+.account-help{margin:16px 0;padding:16px;background:var(--taxi-bg);border-radius:18px}.account-help h3{font-size:16px;margin-top:0}
+#office-whatsapp{display:flex;min-height:48px;margin:0 0 12px;padding:10px 14px;font-size:14px;border-radius:12px;background:var(--taxi-card);color:var(--taxi-ink);border:1px solid var(--taxi-border);text-decoration:none}
+.chat-message time{font-size:12px}
+@media(max-width:380px){.home-greeting h1{font-size:28px}#ride-form{padding:12px;margin-inline:10px}.pickup-field{gap:6px}}
+@media(max-height:480px) and (orientation:landscape){#request-panel .map-stage,#request-panel #home-map{height:190px!important;min-height:190px!important}.home-greeting{padding-block:4px}}
+
+/* Map first, with a compact booking sheet and inline trip information. */
+#account #request-panel #journey-map .map-stage,#account #request-panel #journey-map #home-map{height:46dvh!important;min-height:260px!important}
+.home-greeting{padding:4px 20px 8px}.home-greeting>span{display:none}.home-greeting h1{font-size:26px}
+#request-panel.has-active-ride #journey-map .map-stage,#request-panel.has-active-ride #journey-map #home-map{height:52dvh!important;min-height:280px!important}
+#journey-status{order:0;margin:10px 14px 0;padding:12px 16px;font-size:18px;border-radius:16px}
+#rides .card{padding:14px;border-radius:18px;margin:0 0 10px}#rides .card h3{font-size:16px;line-height:1.6;margin-block:8px}#rides .card p{font-size:14px;margin-block:6px}
+#rides .card>a,#rides .card>button{min-height:48px;padding:10px 14px;font-size:14px;margin:6px 0 0 8px}
+@media(max-height:480px) and (orientation:landscape){#account #request-panel #journey-map .map-stage,#account #request-panel #journey-map #home-map{height:65dvh!important;min-height:180px!important}}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
+
+/* One scroll surface per task; dialogs use the visual viewport when the IME opens. */
+main>header>div{flex:1;min-width:0}header .brand{max-width:none;overflow-wrap:anywhere}
+header .brand-mark{flex:none;width:40px;height:40px}header button.quiet{flex:none;padding:8px}
+#customer-menu{display:block;font-size:12px;min-width:48px}
+.journey-health{margin:0;padding:8px 20px;font-size:13px;color:var(--taxi-muted);background:var(--taxi-card)}
+#journey-progress{display:flex;gap:8px;overflow:auto;margin:0;padding:8px 16px;font-size:12px;list-style:none}
+#journey-progress li{flex:0 0 auto;padding:6px 10px;border:1px solid var(--taxi-border);border-radius:12px}
+#rides{padding:12px 14px}#rides .card{display:flex;flex-wrap:wrap;gap:8px}
+#request-panel.has-active-ride #journey-map .map-stage,#request-panel.has-active-ride #journey-map #home-map{height:clamp(180px,38dvh,320px)!important;min-height:180px!important}
+.has-active-ride #rides .card>.badge{display:none}
+#rides .card>.badge,#rides .card>h3,#rides .card>.trip-driver,#rides .card>details{flex-basis:100%;margin:0}
+#rides .card>h3{overflow-wrap:anywhere}#rides .card>a,#rides .card>button{flex:1 1 128px;margin:0;display:flex;align-items:center;justify-content:center;text-align:center}
+.trip-driver{font-size:14px;line-height:1.6}.trip-details{border-top:1px solid var(--taxi-border);padding-top:4px}
+.trip-details summary{min-height:48px;display:flex;align-items:center;cursor:pointer;font-weight:700}
+.trip-details[open]{max-height:36dvh;overflow:auto;overscroll-behavior:contain}
+button:focus-visible,a:focus-visible,summary:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:3px solid #2563eb;outline-offset:2px}
+button:active,a:active{opacity:.8}button:disabled{opacity:.55}
+dialog.mobile-picker{max-height:calc(var(--customer-viewport-height,100dvh) - 24px - env(safe-area-inset-top));overscroll-behavior:contain}
+dialog.ride-chat{width:min(100% - 16px,536px);height:calc(var(--customer-viewport-height,100dvh) - 24px - env(safe-area-inset-top));max-height:720px;display:grid;grid-template-rows:auto minmax(64px,1fr) auto auto auto auto;gap:8px;padding:16px;overflow:hidden;margin:auto;border:1px solid var(--taxi-border);border-radius:24px;background:var(--taxi-card);color:var(--taxi-ink)}
+dialog.ride-chat:not([open]){display:none}.ride-chat::backdrop{background:#111827bb}
+dialog.ride-chat[open]{display:grid;box-sizing:border-box;inset-block-start:max(12px,env(safe-area-inset-top));inset-block-end:auto;margin-block:0}
+.ride-chat .chat-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}.chat-heading h2{margin:0;font-size:20px}.chat-heading button{min-height:48px;margin:0}
+.ride-chat .chat-messages{min-height:0;max-height:none;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
+.ride-chat .chat-message{overflow-wrap:anywhere}.ride-chat .chat-message p{white-space:pre-wrap;margin:0 0 6px}
+.ride-chat form{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin:0;padding:0;align-items:end;background:transparent;border:0}
+.ride-chat label{margin:0;font-size:13px}.ride-chat textarea{min-width:0;min-height:64px;max-height:110px;margin:4px 0 0;resize:none;font-size:16px;background:var(--taxi-bg);color:var(--taxi-ink)}
+.ride-chat form button{min-width:64px;min-height:48px;margin:0}.ride-chat p[role=status]{font-size:13px;margin:0;line-height:1.5}
+.ride-chat .place-chips{margin:0}.ride-chat .place-chips button{font-size:12px}
+.keyboard-open .customer-navigation{display:none!important}.keyboard-open>main{padding-bottom:16px}
+.keyboard-open dialog.ride-chat{grid-template-rows:auto minmax(0,1fr) auto auto;gap:6px;padding:12px}
+.keyboard-open .ride-chat .place-chips,.keyboard-open .ride-chat .chat-older{display:none}
+.keyboard-open .ride-chat textarea{min-height:48px;height:48px;max-height:64px}
+.ride-chat p[role=status]{max-height:3.2em;overflow:auto}
+@media(max-height:480px){dialog.ride-chat{padding:8px;gap:4px}.ride-chat .place-chips{display:none}.chat-heading h2{font-size:18px}.ride-chat textarea{min-height:48px;max-height:64px}.ride-chat form label{font-size:12px}}
+@media(max-width:360px){main>header{padding-inline:8px;gap:6px}header .brand-mark{width:32px;height:32px}header .brand{font-size:12px}#customer-menu{padding:4px;font-size:11px}.ride-chat .chat-heading{gap:4px}.chat-heading h2{font-size:18px}}

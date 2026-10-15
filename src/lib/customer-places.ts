@@ -1,15 +1,16 @@
+import {normalizePhone} from './phone-normalization.js';
 export type LocationSource = 'CUSTOMER_GPS' | 'WHATSAPP_LOCATION' | 'MAP_PIN' | 'ADDRESS_SEARCH' | 'MANUAL_TEXT' | 'SAVED_ADDRESS';
 export type RequestLocation = { addressText: string; neighborhood?: string; street?: string; latitude: number | null; longitude: number | null; locationSource: LocationSource; notes?: string };
 export type SavedAddress = Omit<RequestLocation, 'locationSource'> & { id: string; customerId: string; label: string; icon: 'HOME' | 'WORK' | 'OTHER'; isDefault: boolean; version: number; createdAt?: string; updatedAt?: string };
 export type CustomerPlace = { address: SavedAddress; customerName: string; phone: string };
-export type ApiCustomer = { id: string; fullName: string; phone: string; secondaryPhone?: string; notes?: string; isActive?: boolean; createdAt?: string };
+export type ApiCustomer = { id: string; fullName: string; phone: string; secondaryPhone?: string; notes?: string; isActive?: boolean; createdAt?: string; addressText?:string; orderCount?:number; lastOrderAt?:string|null; firstOrderAt?:string|null };
 export function matchesCustomer(text: string, phone: string, search: string) {
   const query = search.trim().toLowerCase();
-  const normalized = query.startsWith('05') ? '+970' + query.slice(1) : query;
-  return text.toLowerCase().includes(query) || phone.includes(normalized);
+  const normalized = normalizePhone(query);
+  return text.toLowerCase().includes(query) || !!normalized && normalizePhone(phone).includes(normalized);
 }
 export function findCustomerByPhone(customers: ApiCustomer[], value: string) {
-  const digits=(phone:string)=>phone.replace(/\D/g,'').replace(/^970/,'0');
+  const digits=normalizePhone;
   const normalized=digits(value); if(normalized.length<9)return undefined;
   return customers.find(customer=>digits(customer.phone)===normalized||digits(customer.secondaryPhone??'')===normalized);
 }

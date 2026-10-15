@@ -4,6 +4,7 @@
 "use server";
 
 import 'dotenv/config';
+import { authorizeLegacyAdmin } from '@/lib/legacy-admin-authorization';
 import { z } from "zod";
 import { randomBytes } from 'crypto';
 import { sendMail } from "@/lib/email";
@@ -15,7 +16,7 @@ import { revalidatePath } from 'next/cache';
 
 
 // Helper to generate a random code
-function generateInviteCode(length = 6) {
+function generateInviteCode(length = 32) {
     return randomBytes(Math.ceil(length / 2)).toString('hex').slice(0, length).toUpperCase();
 }
 
@@ -26,6 +27,9 @@ const sendInviteSchema = z.object({
 });
 
 export async function sendInviteEmail(prevState: any, formData: FormData) {
+    const actor = await authorizeLegacyAdmin();
+    if (!actor) return { type: "error", message: "Administrative authorization required." };
+    formData.set("invitedById", actor.uid);
   const validatedFields = sendInviteSchema.safeParse(Object.fromEntries(formData.entries()));
 
   if (!validatedFields.success) {
@@ -81,6 +85,9 @@ const inviteDriverSchema = z.object({
 });
 
 export async function inviteDriver(prevState: any, formData: FormData) {
+    const actor = await authorizeLegacyAdmin();
+    if (!actor) return { type: "error", message: "Administrative authorization required." };
+    formData.set("invitedById", actor.uid);
   const validatedFields = inviteDriverSchema.safeParse(Object.fromEntries(formData.entries()));
 
   if (!validatedFields.success) {
@@ -111,7 +118,7 @@ export async function inviteDriver(prevState: any, formData: FormData) {
         subject: `You're invited to join DispatchPro, ${driverName}!`,
         html: `
             <h1>Invitation to DispatchPro</h1>
-            <p>Hi ${driverName},</p>
+            <p>Hi ${driverName.replace(/[&<>"']/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]!))},</p>
             <p>You have been invited to join the DispatchPro platform as a driver.</p>
             <p>Please register by clicking the link below:</p>
             <a href="${registrationUrl}" target="_blank">${registrationUrl}</a>
@@ -149,6 +156,8 @@ const getRandomLocation = () => {
 };
 
 export async function createDriver(prevState: any, formData: FormData) {
+    const actor = await authorizeLegacyAdmin();
+    if (!actor) return { type: "error", message: "Administrative authorization required." };
     const formValues = Object.fromEntries(formData.entries());
     const validatedFields = createDriverSchema.safeParse(formValues);
 
@@ -207,6 +216,8 @@ const updateDriverSchema = z.object({
 });
 
 export async function updateDriver(prevState: any, formData: FormData) {
+    const actor = await authorizeLegacyAdmin();
+    if (!actor) return { type: "error", message: "Administrative authorization required." };
     const formValues = Object.fromEntries(formData.entries());
     const validatedFields = updateDriverSchema.safeParse(formValues);
 
@@ -253,6 +264,8 @@ export async function updateDriver(prevState: any, formData: FormData) {
 }
 
 export async function deleteDriver(driverId: string) {
+    const actor = await authorizeLegacyAdmin();
+    if (!actor) return { type: "error", message: "Administrative authorization required." };
     try {
         const driverRef = doc(db, 'drivers', driverId);
         await deleteDoc(driverRef);
@@ -275,6 +288,8 @@ const createVehicleSchema = z.object({
 
 
 export async function createVehicle(prevState: any, formData: FormData) {
+    const actor = await authorizeLegacyAdmin();
+    if (!actor) return { type: "error", message: "Administrative authorization required." };
     const validatedFields = createVehicleSchema.safeParse(
         Object.fromEntries(formData.entries())
     );
@@ -329,6 +344,8 @@ const updateVehicleSchema = z.object({
 });
 
 export async function updateVehicle(prevState: any, formData: FormData) {
+    const actor = await authorizeLegacyAdmin();
+    if (!actor) return { type: "error", message: "Administrative authorization required." };
     const validatedFields = updateVehicleSchema.safeParse(
         Object.fromEntries(formData.entries())
     );
@@ -365,6 +382,9 @@ const createTicketSchema = z.object({
 });
 
 export async function createTicket(prevState: any, formData: FormData) {
+    const actor = await authorizeLegacyAdmin();
+    if (!actor) return { type: "error", message: "Administrative authorization required." };
+    formData.set("reportedById", actor.uid);
   const validatedFields = createTicketSchema.safeParse(
     Object.fromEntries(formData.entries())
   );
@@ -422,6 +442,8 @@ const updateTicketSchema = z.object({
 });
 
 export async function updateTicket(prevState: any, formData: FormData) {
+    const actor = await authorizeLegacyAdmin();
+    if (!actor) return { type: "error", message: "Administrative authorization required." };
     const validatedFields = updateTicketSchema.safeParse(Object.fromEntries(formData.entries()));
     if (!validatedFields.success) {
         return { type: "error", message: "Invalid data.", errors: validatedFields.error.flatten().fieldErrors };
@@ -446,6 +468,9 @@ const addCommentSchema = z.object({
 });
 
 export async function addTicketComment(prevState: any, formData: FormData) {
+    const actor = await authorizeLegacyAdmin();
+    if (!actor) return { type: "error", message: "Administrative authorization required." };
+    formData.set("userId", actor.uid);
     const validatedFields = addCommentSchema.safeParse(Object.fromEntries(formData.entries()));
     if (!validatedFields.success) {
         return { type: "error", message: "Invalid comment." };
@@ -472,6 +497,8 @@ const startShiftSchema = z.object({
 });
 
 export async function startShift(prevState: any, formData: FormData) {
+    const actor = await authorizeLegacyAdmin();
+    if (!actor) return { type: "error", message: "Administrative authorization required." };
   const validatedFields = startShiftSchema.safeParse(
     Object.fromEntries(formData.entries())
   );
@@ -524,6 +551,8 @@ const updateShiftSchema = z.object({
 });
 
 export async function updateShift(prevState: any, formData: FormData) {
+    const actor = await authorizeLegacyAdmin();
+    if (!actor) return { type: "error", message: "Administrative authorization required." };
   const validatedFields = updateShiftSchema.safeParse(
     Object.fromEntries(formData.entries())
   );
@@ -576,6 +605,8 @@ export async function updateShift(prevState: any, formData: FormData) {
 }
 
 export async function endShift(shiftId: string, driverId: string, vehicleId: string) {
+    const actor = await authorizeLegacyAdmin();
+    if (!actor) return { type: "error", message: "Administrative authorization required." };
     const batch = writeBatch(db);
     try {
         // 1. Update the shift document
@@ -605,6 +636,8 @@ const notesSchema = z.object({
 });
 
 export async function updateShiftNotes(prevState: any, formData: FormData) {
+    const actor = await authorizeLegacyAdmin();
+    if (!actor) return { type: "error", message: "Administrative authorization required." };
   const shiftId = formData.get('shiftId') as string;
   const validatedFields = notesSchema.safeParse({
     notes: formData.get("notes"),
@@ -629,6 +662,8 @@ export async function updateShiftNotes(prevState: any, formData: FormData) {
 }
 
 export async function updateVehicleNotes(prevState: any, formData: FormData) {
+    const actor = await authorizeLegacyAdmin();
+    if (!actor) return { type: "error", message: "Administrative authorization required." };
   const vehicleId = formData.get('vehicleId') as string;
   const validatedFields = notesSchema.safeParse({
     notes: formData.get("notes"),
@@ -654,6 +689,8 @@ export async function updateVehicleNotes(prevState: any, formData: FormData) {
 }
 
 export async function resetPassword(email: string) {
+    const actor = await authorizeLegacyAdmin();
+    if (!actor) return { type: "error", message: "Administrative authorization required." };
     if (!adminAuth) {
         return { type: "error", message: "Auth service not available. Please check server configuration." };
     }
@@ -691,6 +728,8 @@ export async function resetPassword(email: string) {
 }
 
 export async function disableUser(userId: string) {
+    const actor = await authorizeLegacyAdmin();
+    if (!actor) return { type: "error", message: "Administrative authorization required." };
     if (!adminAuth) {
         return { type: "error", message: "Auth service not available. Please check server configuration." };
     }
@@ -737,6 +776,8 @@ const addBanSchema = banBaseSchema.extend({
 });
 
 export async function addBan(prevState: any, formData: FormData) {
+    const actor = await authorizeLegacyAdmin();
+    if (!actor) return { type: "error", message: "Administrative authorization required." };
   const validatedFields = addBanSchema.safeParse(Object.fromEntries(formData));
   if (!validatedFields.success) {
     return {
@@ -766,6 +807,8 @@ const updateBanSchema = banBaseSchema.extend({
 });
 
 export async function updateBan(prevState: any, formData: FormData) {
+    const actor = await authorizeLegacyAdmin();
+    if (!actor) return { type: "error", message: "Administrative authorization required." };
     const validatedFields = updateBanSchema.safeParse(Object.fromEntries(formData));
     if (!validatedFields.success) {
         return {
@@ -789,6 +832,8 @@ export async function updateBan(prevState: any, formData: FormData) {
 }
 
 export async function deleteBan(banId: string) {
+    const actor = await authorizeLegacyAdmin();
+    if (!actor) return { type: "error", message: "Administrative authorization required." };
   try {
     await deleteDoc(doc(db, 'bans', banId));
     revalidatePath('/admin/auditing');
@@ -799,6 +844,8 @@ export async function deleteBan(banId: string) {
 }
 
 export async function updateRideTags(rideId: string, tag: RideTag, add: boolean) {
+    const actor = await authorizeLegacyAdmin();
+    if (!actor) return { type: "error", message: "Administrative authorization required." };
     try {
         const rideRef = doc(db, 'rides', rideId);
         await updateDoc(rideRef, {
@@ -813,6 +860,8 @@ export async function updateRideTags(rideId: string, tag: RideTag, add: boolean)
 }
 
 export async function updateRide(rideId: string, updateData: Partial<Ride>) {
+    const actor = await authorizeLegacyAdmin();
+    if (!actor) return { type: "error", message: "Administrative authorization required." };
     try {
         const rideRef = doc(db, 'rides', rideId);
         const dataToUpdate = { ...updateData };

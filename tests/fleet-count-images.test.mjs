@@ -1,0 +1,8 @@
+import test from 'node:test';import assert from 'node:assert/strict';import{registerHooks}from'node:module';import{receptionRenderHooks}from'./helpers/reception-render.mjs';
+test('cluster counts render locally, reuse cached pixels and reject unrelated missing-image IDs',async()=>{
+ const hooks=receptionRenderHooks(),stub=registerHooks({resolve(s,c,next){if(s==='react-map-gl/maplibre')return{url:'data:text/javascript,export const Source="source",Layer="layer";',shortCircuit:true};return next(s,c);}});const prior=globalThis.document;let canvases=0;const drawn=[];
+ globalThis.document={createElement(tag){assert.equal(tag,'canvas');canvases++;const canvas={width:0,height:0};canvas.getContext=()=>({fillText:text=>drawn.push(text),getImageData:()=>({width:canvas.width,height:canvas.height,data:new Uint8ClampedArray(canvas.width*canvas.height*4)})});return canvas;}};
+ const map=()=>{const images=new Map();return {images,hasImage:id=>images.has(id),addImage:(id,image,options)=>{assert.equal(options.pixelRatio,2);images.set(id,image);}};};
+ try{const{installTaxiImages}=await import('../src/components/office-taxi-layer.tsx');const first=map();installTaxiImages(first,'taxi-count-25');assert.deepEqual(drawn,['25']);assert.ok(first.images.get('taxi-count-25').width>0);installTaxiImages(first,'taxi-count-25');assert.equal(canvases,1);const second=map();installTaxiImages(second,'taxi-count-25');assert.equal(canvases,1);assert.equal(first.images.get('taxi-count-25'),second.images.get('taxi-count-25'));installTaxiImages(second,'taxi-count-1.2k');assert.equal(drawn.at(-1),'1.2k');installTaxiImages(second,'taxi-count-http://invalid');assert.equal(canvases,2);
+ }finally{globalThis.document=prior;stub.deregister();hooks.deregister();}
+});

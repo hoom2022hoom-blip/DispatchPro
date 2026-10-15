@@ -75,7 +75,7 @@ export function RideCard({ ride, shifts, onAssignDriver, onChangeStatus, onSetFa
   useEffect(() => {
     if (isFareModalOpen) {
       const hasPaymentDetails = ride.paymentDetails && (ride.paymentDetails.cash || ride.paymentDetails.card || ride.paymentDetails.check);
-      setFareCash(ride.paymentDetails?.cash ?? (!hasPaymentDetails ? ride.totalFare : undefined));
+      setFareCash(ride.paymentDetails?.cash ?? (!hasPaymentDetails ? ride.totalFare ?? undefined : undefined));
       setFareCard(ride.paymentDetails?.card ?? undefined);
       setFareCheck(ride.paymentDetails?.check ?? undefined);
       setFareTip(ride.paymentDetails?.tip ?? undefined);
@@ -94,7 +94,7 @@ export function RideCard({ ride, shifts, onAssignDriver, onChangeStatus, onSetFa
   };
 
   const handleSetFare = () => {
-    const newTotalFare = totalPayment > 0 ? totalPayment : ride.totalFare
+    const newTotalFare = totalPayment > 0 ? totalPayment : (ride.totalFare ?? 0)
     onSetFare(ride.id, {
       totalFare: newTotalFare,
       paymentDetails: {
@@ -115,7 +115,7 @@ export function RideCard({ ride, shifts, onAssignDriver, onChangeStatus, onSetFa
     }
 
     const paymentTotal = (ride.paymentDetails?.cash || 0) + (ride.paymentDetails?.card || 0) + (ride.paymentDetails?.check || 0);
-    const isPaid = paymentTotal >= ride.totalFare;
+    const isPaid = ride.totalFare != null && paymentTotal >= ride.totalFare;
 
     if (isPaid) {
       onChangeStatus(ride.id, 'completed');
@@ -158,7 +158,7 @@ export function RideCard({ ride, shifts, onAssignDriver, onChangeStatus, onSetFa
         ride.totalFare ? (
             <div className="flex items-center pt-1 text-xs text-muted-foreground">
                 <DollarSign className="mr-1.5 h-3.5 w-3.5 text-green-600" />
-                <span className="font-medium text-foreground">{formatCurrency(ride.totalFare)}</span>
+                <span className="font-medium text-foreground">{formatCurrency(ride.totalFare ?? undefined)}</span>
                 {parts.length > 0 && <span className="ml-2">({parts.join(', ')})</span>}
             </div>
         ) : null
@@ -518,7 +518,7 @@ export function RideCard({ ride, shifts, onAssignDriver, onChangeStatus, onSetFa
           <AlertDialogHeader>
             <AlertDialogTitle>Payment Status</AlertDialogTitle>
             <AlertDialogDescription>
-              The fare ({formatCurrency(ride.totalFare)}) has not been fully paid. How would you like to proceed?
+              The fare ({formatCurrency(ride.totalFare ?? undefined)}) has not been fully paid. How would you like to proceed?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex-col gap-2 sm:flex-row">

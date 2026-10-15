@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // Adapter entry point for an existing WhatsApp/iCall process; reuse the same eventId on retries.
-export async function sendCall(event, url = 'http://127.0.0.1:9005/api/calls') {
+export async function sendCall(event, url = `http://127.0.0.1:${process.env.DISPATCHPRO_ICALL_HTTP_PORT || 9007}/api/calls`) {
   const target = new URL(url);
   if (!['127.0.0.1', 'localhost', '[::1]'].includes(target.hostname)) throw new Error('Local endpoint required');
   const tokenFile = resolve(process.env.DISPATCHPRO_LOCAL_DATA_DIR || '.dispatchpro-local', 'call-token');

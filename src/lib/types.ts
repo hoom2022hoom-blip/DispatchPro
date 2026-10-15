@@ -120,6 +120,10 @@ export type MaintenanceTicket = {
 export type RideTag = 'UNPAID';
 
 export type Ride = {
+  backendRideId?: string;
+  rideVersion?: number;
+  queuedDriverId?: string | null;
+  jobPosition?: number | null;
   rideRequestId?: string;
   customerId?: string;
   savedAddressId?: string | null;
@@ -136,9 +140,18 @@ export type Ride = {
   receptionPending?: boolean;
   orderDay?: string;
   orderNumber?: number;
-  source?: 'WHATSAPP' | 'LANDLINE_ICALL' | 'MANUAL' | 'CUSTOMER_APP';
+  source?: 'WHATSAPP' | 'LANDLINE_ICALL' | 'MANUAL' | 'CUSTOMER_APP' | 'DRIVER_STREET' | 'OFFICE' | 'LANDLINE' | 'EXTERNAL' | 'BRIDGE';
   pickup: Location;
-  totalFare: number;
+  totalFare: number | null;
+  fareMode?: 'OFFICE_MANUAL'|'DRIVER_MANUAL'|'GPS_METER';
+  fareSource?: string|null;
+  finalFare?: number|null;
+  meterCalculatedFare?: number|null;
+  currency?: string;
+  distanceKm?: number|null;
+  durationSeconds?: number|null;
+  waitingSeconds?: number|null;
+  fareUpdatedBy?: string|null;
   passengerName?: string;
   addressStatus?: 'default' | 'variable';
   addressType?: 'FIXED' | 'VARIABLE';
@@ -147,7 +160,7 @@ export type Ride = {
   dispatchMode?: 'MANUAL'|'AUTO_NEAREST'|'HYBRID';
   lastDispatchOutcome?: string | null;
   passengerPhone?: string;
-  dropoff?: Location;
+  dropoff?: { name: string; coords?: Location['coords'] };
   stops?: Location[];
   status: RideStatus;
   driverId: string | null; // This will be deprecated in favor of shiftId

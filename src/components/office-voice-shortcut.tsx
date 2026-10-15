@@ -1,0 +1,21 @@
+"use client";
+import {useEffect,useRef,useState} from 'react';
+import {apiReceptionBackend as api} from '@/lib/reception-api';
+import {DEFAULT_VOICE_SHORTCUT,validVoiceShortcut,voiceShortcutLabel,bindVoiceShortcut} from '@/lib/voice-shortcut';
+import type {VoiceClient,VoiceStatus} from '@/lib/voice-client';
+const changed='dispatchpro.voice-shortcut-changed';
+export function useOfficeVoiceShortcut(){
+ const [code,setCode]=useState(DEFAULT_VOICE_SHORTCUT);
+ useEffect(()=>{let active=true;const load=()=>{if(!api.administration)return;void api.administration<{code:string}>('voice/shortcut').then(value=>{if(active&&validVoiceShortcut(value.code))setCode(value.code);}).catch(()=>{});};const update=(event:Event)=>{const next=(event as CustomEvent<string>).detail;if(validVoiceShortcut(next))setCode(next);else load();};load();window.addEventListener(changed,update);window.addEventListener('focus',load);return()=>{active=false;window.removeEventListener(changed,update);window.removeEventListener('focus',load);};},[]);
+ return code;
+}
+export function usePublicVoiceShortcut(client:VoiceClient|null,status:VoiceStatus,code:string){
+ const current=useRef({client,status});current.current={client,status};
+ useEffect(()=>bindVoiceShortcut(window,code,()=>{const {client,status}=current.current;if(client&&status.connected&&status.state?.self.office){client.unlock();void client.start('public');}},()=>current.current.client?.stop()),[code,client]);
+}
+export function OfficeVoiceShortcutSettings(){
+ const code=useOfficeVoiceShortcut();const [capturing,setCapturing]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');const pending=useRef<string|null>(null),lock=useRef(false);
+ async function save(next:string){if(lock.current)return;lock.current=true;setBusy(true);setError('');setNotice('');try{await api.administration('voice/shortcut','PUT',{code:next});window.dispatchEvent(new CustomEvent(changed,{detail:next}));setCapturing(false);setNotice('تم حفظ اختصار التحدث العام');}catch(e){setError((e as Error).message);}finally{lock.current=false;setBusy(false);}}
+ useEffect(()=>{if(!capturing)return;const reject=()=>{pending.current=null;setError('هذا الاختصار محجوز، اختر زرًا آخر');};const down=(e:KeyboardEvent)=>{if(e.repeat)return;e.preventDefault();e.stopPropagation();if(e.key==='Escape'){setCapturing(false);return;}if(!validVoiceShortcut(e.code)||e.metaKey||e.shiftKey||(!e.code.startsWith('Control')&&e.ctrlKey)||(!e.code.startsWith('Alt')&&e.altKey)){reject();return;}if(e.code.startsWith('Control')||e.code.startsWith('Alt')){pending.current=e.code;return;}void save(e.code);};const up=(e:KeyboardEvent)=>{if(pending.current===e.code){pending.current=null;void save(e.code);}};window.addEventListener('keydown',down,true);window.addEventListener('keyup',up,true);return()=>{pending.current=null;window.removeEventListener('keydown',down,true);window.removeEventListener('keyup',up,true);};},[capturing]);
+ return <section dir="rtl" data-voice-shortcut-capture className="m-4 space-y-3 rounded-xl border bg-white p-4"><h2 className="font-bold">اختصار التحدث العام</h2><p>الزر الحالي: <kbd dir="ltr" className="rounded border bg-slate-100 px-2 py-1">{voiceShortcutLabel(code)}</kbd></p><p className="text-sm text-slate-600">اضغط مطولًا للتحدث، وارفع الإصبع للإيقاف. الإعداد خاص بحسابك في المكتب.</p><div className="flex flex-wrap gap-2"><button type="button" disabled={busy} onClick={()=>{setError('');setNotice('');setCapturing(true);}} className="min-h-11 rounded border px-4 focus-visible:ring-2 focus-visible:ring-blue-600">تغيير</button><button type="button" disabled={busy} onClick={()=>void save(DEFAULT_VOICE_SHORTCUT)} className="min-h-11 rounded border px-4 focus-visible:ring-2 focus-visible:ring-blue-600">إعادة الافتراضي</button>{capturing&&<button type="button" onClick={()=>setCapturing(false)} className="min-h-11 rounded border px-4">إلغاء</button>}</div>{capturing&&<p role="status">اضغط الزر الجديد الآن · Esc للإلغاء</p>}<p className="text-xs text-slate-500">F1–F4، F8، F9، Space، Ctrl أو Alt منفردًا. تُرفض اختصارات المتصفح المحجوزة.</p>{busy&&<p role="status">جارٍ الحفظ…</p>}{notice&&<p role="status">{notice}</p>}{error&&<p role="alert" className="text-red-700">{error}</p>}</section>;
+}

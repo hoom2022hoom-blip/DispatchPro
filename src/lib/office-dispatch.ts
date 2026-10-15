@@ -9,10 +9,11 @@ export const dispatchStates: Record<DispatchStatus,{label:string;color:string;st
  ARRIVED:{label:'وصل السائق',color:'bg-blue-100 text-blue-800',status:'arrived'},
  STARTED:{label:'بدأت الرحلة',color:'bg-violet-100 text-violet-800',status:'in-progress'},
  COMPLETED:{label:'مكتمل',color:'bg-emerald-100 text-emerald-800',status:'completed'},
- CANCELLED:{label:'ملغي',color:'bg-slate-200 text-slate-700',status:'cancelled'},
+ CANCELLED:{label:'ملغي',color:'bg-red-50 text-red-800',status:'cancelled'},
 };
-export const receptionColumns=['\u0639\u062f\u062f','الوقت','الهاتف','اسم الزبون','العنوان','السائق','الحالة','إرسال','تكرار'];
+export const receptionColumns=['\u0639\u062f\u062f','الوقت','الهاتف','اسم الزبون','العنوان','السائق','الحالة','السعر','إرسال','الإجراءات'];
 export function receptionRowPresentation(ride:Ride):{color:string;label:string} {
+ if(ride.queuedDriverId)return {color:'bg-sky-50 hover:bg-sky-100',label:`في طابور السائق · ${ride.jobPosition??''}`};
  if(ride.rideStatus==='NO_DRIVER_AVAILABLE')return {color:'bg-rose-100 hover:bg-rose-200',label:'لا يوجد سائق متاح'};
  const state=dispatchState(ride);
  if(['PENDING','SENT'].includes(state)&&['REJECTED','TIMEOUT','UNAVAILABLE'].includes(ride.lastDispatchOutcome??''))return {color:'bg-orange-100 hover:bg-orange-200',label:ride.lastDispatchOutcome==='REJECTED'?'رفض السابق · الانتقال للسائق التالي':ride.lastDispatchOutcome==='TIMEOUT'?'انتهت المهلة · السائق التالي':'السائق غير متاح · الانتقال للتالي'};
@@ -45,10 +46,10 @@ export function duplicateReceptionRide(ride: Ride, id: string, now = new Date())
   longitude: ride.longitude,
   locationSource: ride.locationSource,
   pickup: { name: addressText, coords: { x: ride.latitude ?? ride.pickup.coords.x, y: ride.longitude ?? ride.pickup.coords.y } },
-  ...(ride.dropoff ? { dropoff: { ...ride.dropoff, coords: { ...ride.dropoff.coords } } } : {}),
+  ...(ride.dropoff ? { dropoff: { ...ride.dropoff, ...(ride.dropoff.coords ? {coords: {...ride.dropoff.coords}} : {}) } } : {}),
   source: ride.source,
   notes: ride.notes,
-  totalFare: 0,
+  totalFare: null,
   movingFee: false,
   status: 'pending',
   dispatchStatus: 'PENDING',

@@ -45,30 +45,25 @@ test('mounted unified queue searches drivers, adds once, selects and reorders fr
  }finally{await act(async()=>renderer?.unmount());hooks.deregister();delete globalThis.__unifiedUi;}
 });
 
-test('mounted reception has exact columns, send and no cancellation control or menu option',async()=>{
- globalThis.__unifiedUi={};const hooks=componentHooks();let renderer;const saves=[],assignments=[];
+test('mounted reception has exact columns, compact actions and cancellation separate from status menu',async()=>{
+ globalThis.__unifiedUi={};const hooks=componentHooks();let renderer;const saves=[],assignments=[],edits=[];
  let ride={id:'request',orderNumber:1,createdAt:new Date(),status:'pending',dispatchStatus:'PENDING',passengerPhone:'0591234567',passengerName:'زبون',pickup:{name:'عنوان',coords:{x:0,y:0}},addressText:'عنوان',addressType:'FIXED',driverId:null};
  try{
   const {OfficeReceptionTable}=await import('../src/components/office-reception-table.tsx');
-  const render=()=>React.createElement(OfficeReceptionTable,{rides:[ride],drivers:[{id:'a',name:'أحمد'}],choices:[{id:'a',driverId:'a',label:'أحمد'}],onEdit(){},onDuplicate:async()=>{},onSave:async r=>{saves.push(r);ride=r;renderer.update(render());},onAssign:async(id,driverId)=>{assignments.push({id,driverId});ride={...ride,driverId};renderer.update(render());}});
+  const {SendPhoneMenu}=await import('../src/components/send-phone-menu.tsx');
+  const render=()=>React.createElement(OfficeReceptionTable,{rides:[ride],drivers:[{id:'a',name:'أحمد'}],choices:[{id:'a',driverId:'a',label:'أحمد'}],onEdit:r=>edits.push(r),onDuplicate:async()=>{},onSave:async r=>{saves.push(r);ride=r;renderer.update(render());},onAssign:async(id,driverId)=>{assignments.push({id,driverId});ride={...ride,driverId};renderer.update(render());}});
   await act(async()=>{renderer=TestRenderer.create(render());});
   const textOf=node=>node.children.map(child=>typeof child==='string'?child:textOf(child)).join('');assert.deepEqual(renderer.root.findAllByType('th').map(textOf),receptionColumns);
   assert.ok(!receptionColumns.includes('إلغاء'));
   const button=text=>renderer.root.findAllByType('button').find(b=>b.children.join('')===text);
   assert.equal(button('إرسال').props.disabled,false);
-  await act(async()=>button('إرسال').props.onClick());assert.equal(saves.length,0);assert.match(renderer.root.findByProps({role:'alert'}).children.join(''),/السائق/);
-  await act(async()=>renderer.root.findAllByType('button').find(b=>b.findAllByType('span').some(s=>s.children.includes('عنوان'))).props.onClick());
-  await act(async()=>renderer.root.findByType('textarea').props.onChange({target:{value:'عنوان يدوي معدل'}}));
-  await act(async()=>renderer.root.find(n=>n.props['aria-label']==='نوع العنوان').props.onChange({target:{value:'VARIABLE'}}));
-  await act(async()=>renderer.root.findByType('form').props.onSubmit({preventDefault(){}}));
-  assert.equal(saves[0].addressText,'عنوان يدوي معدل');assert.equal(saves[0].addressType,'VARIABLE');assert.equal(saves[0].latitude,null);
+  await act(async()=>renderer.root.findByType(SendPhoneMenu).props.onMissing({closest:()=>null}));assert.equal(saves.length,0);assert.match(renderer.root.findByProps({role:'alert'}).children.join(''),/السائق/);
+  await act(async()=>button('عنوان').props.onClick());assert.equal(edits[0].id,'request');
   await act(async()=>renderer.root.findByType('mock-picker').props.onChange('a'));
   assert.deepEqual(assignments,[{id:'request',driverId:'a'}]);assert.equal(button('إرسال').props.disabled,false);
-  await act(async()=>button('إرسال').props.onClick());assert.equal(saves.at(-1).dispatchStatus,'SENT');assert.equal(renderer.root.findByType('mock-picker').props.disabled,false);assert.equal(renderer.root.findByType('mock-picker').props.changeLabel,'تغيير السائق');
-  assert.match(renderer.root.find(n=>n.props['aria-label']==='حالة الطلب 1').props.className,/amber/);
-  await act(async()=>renderer.root.find(n=>n.props['aria-label']==='حالة الطلب 1').props.onChange({target:{value:'ACCEPTED'}}));assert.equal(saves.at(-1).dispatchStatus,'ACCEPTED');
-  assert.equal(renderer.root.findAllByType('button').some(item=>item.children.join('')==='إلغاء'),false);
-  assert.equal(renderer.root.find(n=>n.props['aria-label']==='حالة الطلب 1').findAllByType('option').some(item=>item.props.value==='CANCELLED'),false);
+  await act(async()=>renderer.root.findByType(SendPhoneMenu).props.onSend(true));assert.equal(saves.at(-1).dispatchStatus,'SENT');assert.equal(renderer.root.findByType('mock-picker').props.disabled,false);assert.equal(renderer.root.findByType('mock-picker').props.changeLabel,'تغيير');
+  assert.equal(renderer.root.findAllByType('select').length,0);
+  await act(async()=>button('كل الطلبات').props.onClick());
   for(const [state,color] of [['PENDING','yellow'],['SENT','amber'],['ACCEPTED','green'],['REJECTED','orange'],['ARRIVING','blue'],['ARRIVED','cyan'],['STARTED','violet'],['COMPLETED','gray']]){
    ride={...ride,dispatchStatus:state,status:dispatchStates[state].status};await act(async()=>renderer.update(render()));
    assert.match(renderer.root.findByType('tbody').findByType('tr').props.className,new RegExp('bg-'+color+'-'));
@@ -84,12 +79,12 @@ test('reception columns expose resize handles and a reset control',async()=>{
   assert.equal(renderer.root.findAllByProps({role:'separator'}).length,receptionColumns.length);
   assert.deepEqual(renderer.root.findAllByProps({role:'separator'}).map(handle=>handle.props['aria-label']),receptionColumns.map(name=>`تغيير عرض عمود ${name}`));
   assert.ok(renderer.root.findByProps({type:'button',children:'إعادة ضبط الأعمدة'}));
-  assert.ok(renderer.root.findAllByType('col').every(column=>Number.isFinite(column.props.style.width)));
-  const table=renderer.root.findByType('table');assert.equal(table.props.style.fontSize,14);
-  await act(async()=>renderer.root.findByProps({'aria-label':'تكبير خط الجدول'}).props.onClick());assert.equal(renderer.root.findByType('table').props.style.fontSize,16);
-  await act(async()=>renderer.root.findByProps({'aria-label':'تصغير خط الجدول'}).props.onClick());assert.equal(renderer.root.findByType('table').props.style.fontSize,14);
+  assert.ok(renderer.root.findAllByType('col').every(column=>typeof column.props.style.width==='string'&&column.props.style.width.endsWith('%')&&Number.isFinite(parseFloat(column.props.style.width))));
+  const table=renderer.root.findByType('table');assert.equal(table.props.style.fontSize,16);
+  await act(async()=>renderer.root.findByProps({'aria-label':'تكبير خط الجدول'}).props.onClick());assert.equal(renderer.root.findByType('table').props.style.fontSize,18);
+  await act(async()=>renderer.root.findByProps({'aria-label':'تصغير خط الجدول'}).props.onClick());assert.equal(renderer.root.findByType('table').props.style.fontSize,16);
   await act(async()=>renderer.root.findByProps({'aria-label':'تكبير خط الجدول'}).props.onClick());await act(async()=>renderer.root.findByProps({'aria-label':'تكبير خط الجدول'}).props.onClick());await act(async()=>renderer.root.findByProps({'aria-label':'تكبير خط الجدول'}).props.onClick());assert.equal(renderer.root.findByType('table').props.style.fontSize,20);assert.equal(renderer.root.findByProps({'aria-label':'تكبير خط الجدول'}).props.disabled,true);
-  await act(async()=>renderer.root.findByProps({'aria-label':'إعادة ضبط الخط'}).props.onClick());assert.equal(renderer.root.findByType('table').props.style.fontSize,14);
+  await act(async()=>renderer.root.findByProps({'aria-label':'إعادة ضبط الخط'}).props.onClick());assert.equal(renderer.root.findByType('table').props.style.fontSize,16);
  }finally{await act(async()=>renderer?.unmount());hooks.deregister();delete globalThis.__unifiedUi;}
 });
 
@@ -102,18 +97,18 @@ test('reception duplicate confirms once and creates an independent unassigned tr
   const {OfficeReceptionTable}=await import('../src/components/office-reception-table.tsx');
   const render=()=>React.createElement(OfficeReceptionTable,{rides:[original],drivers:[],choices:[],onEdit(){},onSave:async()=>{},onAssign:async()=>{},onDuplicate:async copy=>{duplicates.push(copy);await new Promise(resolve=>{resolveDuplicate=resolve;});}});
   await act(async()=>{renderer=TestRenderer.create(render());});
-  const button=renderer.root.findAllByType('button').find(item=>item.children.join('')==='تكرار');
+  const button=renderer.root.findAllByType('button').find(item=>item.children.join('')==='تكرار الطلب');
   await act(async()=>{button.props.onClick();button.props.onClick();});
   assert.equal(confirms,1);assert.equal(duplicates.length,1);
   const copy=duplicates[0];assert.notEqual(copy.id,original.id);assert.equal(copy.rideRequestId,undefined);assert.equal(copy.driverId,null);assert.equal(copy.shiftId,undefined);assert.equal(copy.status,'pending');assert.equal(copy.dispatchStatus,'PENDING');
   for(const key of ['assignedAt','pickedUpAt','startTime','endTime','paymentDetails','reassignmentLog','receptionVersion','orderNumber','orderDay'])assert.equal(copy[key],undefined);
   for(const key of ['customerId','savedAddressId','passengerPhone','passengerName','addressText','addressType','latitude','longitude','source','notes','dropoff'])assert.deepEqual(copy[key],key==='addressType'?'FIXED':original[key]);
   for(const key of ['orderNumber','orderDay','passengerCount','scheduledTime','rideRequestId','shiftId','assignedAt','pickedUpAt','paymentDetails','reassignmentLog'])assert.equal(key in copy,false);
-  assert.equal(copy.totalFare,0);assert.equal(copy.movingFee,false);
+  assert.equal(copy.totalFare,null);assert.equal(copy.movingFee,false);
   assert.equal(copy.driverId,null);assert.equal(copy.dispatchStatus,'PENDING');
   assert.equal(original.driverId,'old-driver');assert.equal(original.status,'in-progress');
   await act(async()=>resolveDuplicate());
-  const secondButton=renderer.root.findAllByType('button').find(item=>item.children.join('')==='تكرار');
+  const secondButton=renderer.root.findAllByType('button').find(item=>item.children.join('')==='تكرار الطلب');
   await act(async()=>secondButton.props.onClick());
   assert.equal(confirms,2);assert.equal(duplicates.length,2);assert.notEqual(duplicates[0].id,duplicates[1].id);assert.equal(original.id,'original-ride');
  }finally{await act(async()=>renderer?.unmount());hooks.deregister();delete globalThis.__unifiedUi;if(priorWindow===undefined)delete globalThis.window;else globalThis.window=priorWindow;}
@@ -122,17 +117,22 @@ test('reception duplicate confirms once and creates an independent unassigned tr
 function componentHooks(){
  const stub=source=>({url:'data:text/javascript,'+encodeURIComponent(source),shortCircuit:true});
  return registerHooks({resolve(specifier,context,next){
-  if(/\/(office-queue|office-reception-table)\.tsx$/.test(context.parentURL??'')){
+  if(/\/(office-queue|office-reception-table|inline-office-fare|send-phone-menu)\.tsx$/.test(context.parentURL??'')){
+   if(specifier==='./send-phone-menu')return next(new URL('../src/components/send-phone-menu.tsx',import.meta.url).href,context);
+   if(specifier==='./ui/popover')return stub('export const Popover="div",PopoverTrigger="div",PopoverContent="section";');
+   if(specifier==='./inline-office-fare')return next(new URL('../src/components/inline-office-fare.tsx',import.meta.url).href,context);
    if(specifier==='./office-workspace')return stub('export const useOffice=()=>({});');
    if(specifier==='@/lib/reception-api')return stub('export const apiReceptionBackend={driverQueue:(...args)=>globalThis.__unifiedUi.api.driverQueue(...args)};');
    if(specifier==='@hello-pangea/dnd')return stub('export const DragDropContext="div";export const Draggable=({children})=>children({innerRef:()=>{},draggableProps:{},dragHandleProps:{}});');
    if(specifier==='./strict-mode-droppable')return stub('export const StrictModeDroppable=({children})=>children({innerRef:()=>{},droppableProps:{},placeholder:null});');
    if(specifier==='./shift-picker')return stub('export const ShiftPicker="mock-picker";');
    if(specifier==='./ui/button')return stub('export const Button="button";');
+   if(specifier==='./ui/dialog')return stub('export const Dialog=p=>p.open?p.children:null;export const DialogContent="section",DialogTitle="h2",DialogDescription="p";');
+   if(specifier==='./ui/dialog')return stub('export const Dialog=p=>p.open?p.children:null;export const DialogContent="section",DialogTitle="h2",DialogDescription="p";');
    if(specifier==='./ui/input')return stub('export const Input="input";');
    if(specifier.startsWith('@/'))return next(new URL('../src/'+specifier.slice(2)+'.ts',import.meta.url).href,context);
   }return next(specifier,context);
- },load(url,context,next){if(/\/(office-queue|office-reception-table)\.tsx$/.test(url))return{format:'module',source:ts.transpileModule(readFileSync(new URL(url),'utf8'),{compilerOptions:{jsx:ts.JsxEmit.ReactJSX,module:ts.ModuleKind.ESNext}}).outputText,shortCircuit:true};return next(url,context);}});
+ },load(url,context,next){if(/\/(office-queue|office-reception-table|inline-office-fare|send-phone-menu)\.tsx$/.test(url))return{format:'module',source:ts.transpileModule(readFileSync(new URL(url),'utf8'),{compilerOptions:{jsx:ts.JsxEmit.ReactJSX,module:ts.ModuleKind.ESNext}}).outputText,shortCircuit:true};return next(url,context);}});
 }
 
 

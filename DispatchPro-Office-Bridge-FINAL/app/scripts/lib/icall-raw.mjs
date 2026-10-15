@@ -23,7 +23,7 @@ export function formatPacket(packet, remote, localPort, timestamp = new Date().t
 }
 
 export function listenRaw({ logFile, port = 3520, host = '0.0.0.0', output = console.log, onError = console.error, persist = true, onPacket = () => {} }) {
-  const socket = createSocket('udp4');
+  const socket = createSocket({ type: 'udp4', reuseAddr: true });
   socket.on('message', (packet, remote) => {
     // Capture every datagram before any parsing. No source-IP or payload filter.
     const record = formatPacket(packet, remote, socket.address().port);

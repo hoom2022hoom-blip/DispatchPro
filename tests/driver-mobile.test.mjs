@@ -8,7 +8,7 @@ test('portable driver uses injected host transport with existing login and versi
   const calls = [];
   configureDriverPlatform({ fetch: async (url, options) => {
     calls.push({ url, options });
-    return Response.json(url.endsWith('auth/login') ? { accessToken: 'test-token' } : { id: 'driver' });
+    return Response.json(url.endsWith('auth/driver-login') ? { accessToken: 'test-token' } : url.endsWith('driver/rides/ride') ? {id:'ride',status:'Arrived',version:9,pickup:'الانطلاق',destination:'الوجهة'} : { id: 'driver',status:'Offline' });
   }, notifications: browserNotifications() });
   const api = createDriverApi(driverPlatform().fetch);
   await api.login('office', 'driver', 'test');
@@ -35,7 +35,7 @@ test('notification abstraction supports injected native providers and restricted
     } });
     await sendBrowserNotification('request', 'safe text');
     assert.equal(requests, 0);
-    assert.deepEqual(shown, [['request', 'safe text']]);
+    assert.deepEqual(shown, [['request', 'safe text', undefined]]);
     assert.equal(await enableBrowserNotifications(), 'granted');
     assert.equal(requests, 1);
     delete globalThis.Notification;

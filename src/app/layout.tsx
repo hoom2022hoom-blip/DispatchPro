@@ -19,9 +19,10 @@ export default function RootLayout({
   return (
     <html lang="ar" className="h-full">
       <head>
-        <title>تكسي نابلس والمهندس | DispatchPro</title>
-        <meta name="description" content="A professional taxi dispatch app to connect passengers with available drivers and manage ride requests efficiently." />
-        <link rel="manifest" href="/manifest.json" />
+        <title>تكسي نابلس والمهندس | نظام إدارة المكتب</title>
+        <meta name="description" content="نظام إدارة مكتب تكسي نابلس والمهندس" />
+        <link rel="icon" href="/favicon.ico" /><link rel="apple-touch-icon" href="/apple-icon.png" /><link rel="manifest" href="/manifest.json" />
+        <link rel="stylesheet" href="/taxi-theme.css" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=PT+Sans:wght@400;700&display=swap" rel="stylesheet" />

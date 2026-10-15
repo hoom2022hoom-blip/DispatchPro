@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android"><item android:width="60dp" android:height="60dp" android:gravity="center" android:drawable="@mipmap/nm_brand"/><item android:width="32dp" android:height="32dp" android:gravity="bottom|end" android:bottom="20dp" android:right="20dp" android:drawable="@drawable/nm_radio_badge"/></layer-list>

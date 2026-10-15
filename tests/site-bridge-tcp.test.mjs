@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {connect} from 'node:net';
+import {createServer,connect} from 'node:net';
 import {mkdtemp,readFile,readdir} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
 import {createOfficeCallsTcpReceiver,parseOfficeCall} from '../DispatchPro-Site-Bridge/scripts/lib/officecalls-tcp.mjs';
@@ -8,9 +8,10 @@ import {createOfficeBridge} from '../DispatchPro-Site-Bridge/scripts/lib/office-
 
 test('OfficeCalls TCP 5050 protocol, durable dedup and existing Bridge forwarding',async()=>{
  const root=await mkdtemp(resolve('.dispatchpro-local/site-tcp-check-'));
- const config={siteId:'site-test',officeId:'11111111-1111-1111-1111-111111111111',tenantId:'11111111-1111-1111-1111-111111111111',whatsappTcpPort:5050,apiUrl:'https://api.example.test',tenant:'test',sourceDirectory:join(root,'calls'),stateDirectory:join(root,'bridge'),startAfter:'2000-01-01T00:00:00Z'};
+ const probe=createServer();await new Promise(r=>probe.listen(0,'127.0.0.1',r));const port=probe.address().port;await new Promise(r=>probe.close(r));
+ const config={siteId:'site-test',officeId:'11111111-1111-1111-1111-111111111111',tenantId:'11111111-1111-1111-1111-111111111111',whatsappTcpPort:port,apiUrl:'https://api.example.test',tenant:'test',sourceDirectory:join(root,'calls'),stateDirectory:join(root,'bridge'),startAfter:'2000-01-01T00:00:00Z'};
  const payload={eventId:'ring-123',type:'incoming_call',number:'+970 59-1234567',caller:'name',package:'com.whatsapp.w4b',timestamp:1790622000000,device:'OfficeCalls'};
- const exchange=(value,split=false)=>new Promise((res,rej)=>{const socket=connect(5050,'127.0.0.1');let response='';socket.setTimeout(3000,()=>socket.destroy(Error('timeout')));socket.on('error',rej);socket.on('data',v=>response+=v);socket.on('end',()=>res(response));socket.on('connect',()=>{const line=JSON.stringify(value)+'\r\n';if(split){socket.write(line.slice(0,17));setTimeout(()=>socket.write(line.slice(17)),10);}else socket.write(line);});});
+ const exchange=(value,split=false)=>new Promise((res,rej)=>{const socket=connect(port,'127.0.0.1');let response='';socket.setTimeout(3000,()=>socket.destroy(Error('timeout')));socket.on('error',rej);socket.on('data',v=>response+=v);socket.on('end',()=>res(response));socket.on('connect',()=>{const line=JSON.stringify(value)+'\r\n';if(split){socket.write(line.slice(0,17));setTimeout(()=>socket.write(line.slice(17)),10);}else socket.write(line);});});
  let receiver=createOfficeCallsTcpReceiver(config,{directory:config.sourceDirectory,host:'127.0.0.1',mirror:async()=>{}});
  await receiver.listen();
  try{

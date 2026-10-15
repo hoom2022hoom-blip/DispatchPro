@@ -13,8 +13,8 @@ export function createOfficeBridge(config, credentials, { fetchImpl = fetch, rep
   if (!credentials.username || !credentials.password) throw Error('Credentials required');
   const store = createCallStore(join(directory, 'calls'));
   const importedFiles = new Set();
-  const binding = JSON.stringify({ apiUrl: new URL(config.apiUrl).href, tenant: config.tenant, tenantId: config.tenantId, source });
-  const worker = createReceptionWorker({ directory, apiUrl: config.apiUrl, tenant: config.tenant, expectedTenantId: config.tenantId, ...credentials, bridge: true, fetchImpl, report: () => report({ type: 'delivery_retry' }) });
+  const binding = JSON.stringify({ apiUrl: new URL(config.apiUrl).href, tenant: config.tenant, tenantId: config.tenantId, source:config.bindingSource??source });
+  const worker = createReceptionWorker({ directory, apiUrl: config.apiUrl, tenant: config.tenant, expectedTenantId: config.tenantId, ...credentials, bridge: true, immutableInbox:config.immutableInbox===true, fetchImpl, report: () => report({ type: 'delivery_retry' }) });
   return { async runOnce() {
     await mkdir(directory, { recursive: true });
     const manifest = join(directory, 'office-binding.json');

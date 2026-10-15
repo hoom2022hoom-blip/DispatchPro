@@ -13,9 +13,12 @@ test('driver editor submits full local contact/profile data, preserves long addr
  const hooks=registerHooks({
   resolve(specifier,context,next){
    if(context.parentURL?.includes('/office-drivers.tsx')) {
+    if(specifier==='./driver-account-panel')return {url:stub('export const DriverAccountPanel=()=>null;'),shortCircuit:true};
+    if(specifier==='./office-driver-voice-access')return {url:stub('export const OfficeDriverVoiceAccess=()=>null;'),shortCircuit:true};
     if(specifier==='./office-workspace')return {url:stub('export const useOffice=()=>globalThis.__officeDriverTest.state;'),shortCircuit:true};
     if(specifier==='@/lib/reception-api')return {url:stub('export const apiReceptionBackend=globalThis.__officeDriverTest.api;'),shortCircuit:true};
     if(specifier==='@/lib/office')return next(new URL('../src/lib/office.ts',import.meta.url).href,context);
+    if(specifier==='@/lib/whatsapp-link')return next(new URL('../src/lib/whatsapp-link.ts',import.meta.url).href,context);
     if(specifier==='next/link')return {url:stub('export default "a";'),shortCircuit:true};
     if(specifier==='./ui/button')return {url:stub('export const Button="button";'),shortCircuit:true};
     if(specifier==='./ui/input')return {url:stub('export const Input="input";'),shortCircuit:true};

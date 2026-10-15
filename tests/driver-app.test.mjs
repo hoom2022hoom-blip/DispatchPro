@@ -8,7 +8,7 @@ test('Driver API validates driver login, forwards version, history and availabil
  const calls=[];
  const api=createDriverApi(async(url,options)=>{
   calls.push({url,options});
-  return Response.json(url.endsWith('auth/login')?{accessToken:'driver-token'}:url.endsWith('driver/me')?{id:'driver',status:'Offline'}:{items:[]});
+  return Response.json(url.endsWith('auth/driver-login')?{accessToken:'driver-token'}:url.endsWith('driver/me')?{id:'driver',status:'Offline'}:url.endsWith('driver/rides/ride')?{id:'ride',status:'Accepted',version:5,pickup:'',destination:''}:{items:[]});
  });
  await assert.rejects(()=>api.history(),e=>e.status===401);
  await api.login('office','driver','password');
@@ -16,17 +16,18 @@ test('Driver API validates driver login, forwards version, history and availabil
  assert.equal(calls[1].options.headers.Authorization,'Bearer driver-token');
  await api.availability('Available');await api.transition({id:'ride',version:4},'Accepted');await api.reject({id:'ride',version:5});await api.history(2);
  assert.deepEqual(JSON.parse(calls[3].options.body),{status:'Accepted',version:4});
- assert.deepEqual(JSON.parse(calls[4].options.body),{version:5});
- assert.match(calls[5].url,/history\?page=2$/);
+ assert.match(calls[4].url,/driver\/rides\/ride$/);
+ assert.deepEqual(JSON.parse(calls[5].options.body),{version:5});
+ assert.match(calls[6].url,/history\?page=2$/);
  api.logout();await assert.rejects(()=>api.updates(),e=>e.status===401);
 });
 
 test('Rejected driver identity and conflict are not automatically retried',async()=>{
  let calls=0;
- const denied=createDriverApi(async url=>{calls++;return url.endsWith('auth/login')?Response.json({accessToken:'token'}):Response.json({},{status:403});});
+ const denied=createDriverApi(async url=>{calls++;return url.endsWith('auth/driver-login')?Response.json({accessToken:'token'}):Response.json({},{status:403});});
  await assert.rejects(()=>denied.login('office','user','password'),e=>e instanceof DriverApiError&&e.status===403);
  await assert.rejects(()=>denied.history(),e=>e.status===401);assert.equal(calls,2);
- let writes=0;const api=createDriverApi(async(url,options)=>url.endsWith('auth/login')?Response.json({accessToken:'token'}):options.method==='PUT'?(writes++,Response.json({error:'changed'},{status:409})):Response.json({id:'driver'}));
+ let writes=0;const api=createDriverApi(async(url,options)=>url.endsWith('auth/driver-login')?Response.json({accessToken:'token'}):options.method==='PUT'?(writes++,Response.json({error:'changed'},{status:409})):Response.json({id:'driver'}));
  await api.login('office','driver','password');await assert.rejects(()=>api.reject({id:'ride',version:1}),e=>e.status===409);assert.equal(writes,1);
 });
 

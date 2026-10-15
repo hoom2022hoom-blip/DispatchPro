@@ -48,8 +48,9 @@ public sealed class AutoDispatch(TaxiDb db, ReceptionService reception, ILogger<
             join location in db.Set<DriverLocation>() on driver.Id equals location.DriverId into locations
             from location in locations.DefaultIfEmpty()
             select new { Driver = driver, Location = location,
+                AccountActive = db.Set<User>().Any(u=>u.Id==driver.UserId&&u.Active),
                 VehicleReady = db.Set<Vehicle>().Any(v => v.Id == driver.CurrentVehicleId && v.Active && v.Status == "ACTIVE")
-                    || driver.CurrentVehicleId == null && db.Set<Vehicle>().Count(v => v.DriverId == driver.Id && v.Active && v.Status == "ACTIVE") == 1,
+                    || driver.CurrentVehicleId == null && !db.Set<DriverVehicleAssignment>().Any(a=>a.DriverId==driver.Id) && db.Set<Vehicle>().Count(v => v.DriverId == driver.Id && v.Active && v.Status == "ACTIVE") == 1,
                 ActiveRide = db.Set<Ride>().Any(r => r.DriverId == driver.Id && r.Id != rideId && (r.Status >= RideStatus.Assigned && r.Status <= RideStatus.InProgress || r.Status == RideStatus.DriverArriving)),
                 AlreadyOffered = db.Set<RideOffer>().Any(o => o.RideId == rideId && o.DriverId == driver.Id),
                 DistanceMeters = location == null ? 0 : location.Position.Distance(point) }).ToListAsync();
@@ -60,6 +61,8 @@ public sealed class AutoDispatch(TaxiDb db, ReceptionService reception, ILogger<
             var reasons = new List<string>();
             if (d.TenantId != request.TenantId) reasons.Add("OFFICE_MISMATCH");
             if (!d.Active) reasons.Add("INACTIVE");
+            if (!d.DriverAppEnabled) reasons.Add("DRIVER_APP_DISABLED");
+            if (!candidate.AccountActive) reasons.Add("ACCOUNT_DISABLED");
             if (d.Status != DriverStatus.Available) reasons.Add(d.Status == DriverStatus.Busy ? "BUSY" : "OFFLINE");
             var locationReason = LocationReason(candidate.Location, cutoff);
             if (locationReason != "READY") reasons.Add(locationReason);
@@ -83,6 +86,15 @@ public sealed class AutoDispatch(TaxiDb db, ReceptionService reception, ILogger<
         var nearest = (await Nearest(request, ride.Id, policy)).FirstOrDefault();
         if (nearest.DriverId == Guid.Empty)
         {
+            // Initial customer search must survive a temporary lack of ready drivers.
+            // Pending rides are retried by the existing worker. Preserve the terminal
+            // outcome after rejection/timeout exhaustion and for missing pickup GPS.
+            if (request.Source == "CUSTOMER_APP" && request.Latitude.HasValue && request.Longitude.HasValue
+                && !await db.Set<RideOffer>().AnyAsync(o => o.RideId == ride.Id))
+            {
+                ride.DriverId = null; ride.OfferExpiresAt = null;
+                return;
+            }
             logger.LogWarning("Dispatch ride {RideId} office {OfficeId}: NO_DRIVER_AVAILABLE", ride.Id, request.TenantId);
             ride.DriverId = null; ride.OfferExpiresAt = null; ride.Status = RideStatus.NoDriverAvailable;
             await reception.SyncRide(ride);
@@ -112,10 +124,11 @@ public sealed class AutoDispatch(TaxiDb db, ReceptionService reception, ILogger<
     public async Task<bool> CanReceive(Ride ride)
     {
         var cutoff = DateTimeOffset.UtcNow.AddSeconds(-(await Policy()).LocationMaxAgeSeconds);
-        return await db.Set<Driver>().AnyAsync(d => d.Id == ride.DriverId && d.Active && d.Status == DriverStatus.Available
+        return await db.Set<Driver>().AnyAsync(d => d.Id == ride.DriverId && d.Active && d.DriverAppEnabled && d.Status == DriverStatus.Available
+            && db.Set<User>().Any(u=>u.Id==d.UserId&&u.Active)
             && db.Set<DriverLocation>().Any(l => l.DriverId == d.Id && l.UpdatedAt >= cutoff && l.Accuracy >= 0 && l.Accuracy <= 200)
             && (db.Set<Vehicle>().Any(v => v.Id == d.CurrentVehicleId && v.Active && v.Status == "ACTIVE")
-                || d.CurrentVehicleId == null && db.Set<Vehicle>().Count(v => v.DriverId == d.Id && v.Active && v.Status == "ACTIVE") == 1))
+                || d.CurrentVehicleId == null && !db.Set<DriverVehicleAssignment>().Any(a=>a.DriverId==d.Id) && db.Set<Vehicle>().Count(v => v.DriverId == d.Id && v.Active && v.Status == "ACTIVE") == 1))
             && !await reception.HasActiveOrder(ride.DriverId!.Value, exceptRequest: ride.RideRequestId);
     }
     public async Task Advance(Ride ride, string outcome)
@@ -146,6 +159,7 @@ public sealed class DispatchWorker(IServiceScopeFactory scopes, ILogger<Dispatch
                     var reception = scope.ServiceProvider.GetRequiredService<ReceptionService>();
                     var dispatch = scope.ServiceProvider.GetRequiredService<AutoDispatch>();
                     await using var tx = await db.Database.BeginTransactionAsync(stoppingToken); await reception.Lock();
+                    foreach (var driverId in await db.Set<DriverJob>().Select(j => j.DriverId).Distinct().ToListAsync(stoppingToken)) await reception.PromoteJob(driverId);
                     var rides = await db.Set<Ride>().Where(r => r.DispatchMode != "MANUAL" && (r.Status == RideStatus.Pending || r.Status == RideStatus.Assigned)).OrderBy(r => r.Id).ToListAsync(stoppingToken);
                     foreach (var ride in rides) { await dispatch.Expire(ride); await dispatch.Next(ride); await db.SaveChangesAsync(stoppingToken); }
                     await tx.CommitAsync(stoppingToken);

@@ -54,6 +54,12 @@ public sealed class DriverAppTests
                 var record=await Read(await office.PostAsJsonAsync("/api/v1/drivers",new{userId=user["id"]!.GetValue<string>(),fullName=username,status="Offline"}));ids.Add(record["id"]!.GetValue<string>());
             }
             await Login(driver,"driver-one");await Login(other,"driver-two");
+            var driverSession=await Read(await anon.PostAsJsonAsync("/api/v1/auth/driver-login",new{tenant="driver-stage",username="driver-one",password="Driver-stage-password-123!"}));
+            var refresh=driverSession["refreshToken"]!.GetValue<string>();
+            var renewed=await Read(await anon.PostAsJsonAsync("/api/v1/auth/refresh",new{refreshToken=refresh}));
+            Assert.NotEqual(refresh,renewed["refreshToken"]!.GetValue<string>());
+            driver.DefaultRequestHeaders.Authorization=new AuthenticationHeaderValue("Bearer",renewed["accessToken"]!.GetValue<string>());
+            await Read(await driver.GetAsync("/api/v1/driver/me"));
             Assert.Equal(ids[0],(await Read(await driver.GetAsync("/api/v1/driver/me")))["id"]!.GetValue<string>());
             Assert.Equal(HttpStatusCode.Forbidden,(await office.GetAsync("/api/v1/driver/me")).StatusCode);
             Assert.Equal(HttpStatusCode.Forbidden,(await driver.GetAsync("/api/v1/notifications/updates")).StatusCode);
@@ -67,7 +73,7 @@ public sealed class DriverAppTests
             var ride=await Assign(await NewRide());var rideId=ride["id"]!.GetValue<string>();
             var update=await Read(await pending.WaitAsync(TimeSpan.FromSeconds(8)));
             Assert.Single(update["data"]!["rides"]!.AsArray());
-            var publicRide=update["data"]!["rides"]![0]!;Assert.Null(publicRide["phone"]);Assert.Null(publicRide["notes"]);
+            var publicRide=update["data"]!["rides"]![0]!;Assert.Null(publicRide["phone"]);Assert.Equal("ملاحظة خاصة",publicRide["notes"]!.GetValue<string>());
             Assert.Contains(update["data"]!["notices"]!.AsArray(),n=>n!["action"]!.GetValue<string>()=="ride.notification.Assigned");
             Assert.Null((await Read(await driver.GetAsync($"/api/v1/driver/rides/{rideId}")))["phone"]);
             Assert.Equal(HttpStatusCode.NotFound,(await other.GetAsync($"/api/v1/driver/rides/{rideId}")).StatusCode);
@@ -80,13 +86,26 @@ public sealed class DriverAppTests
             var stale=ride["version"]!.GetValue<long>();
             foreach(var status in new[]{"Accepted","DriverArriving","Arrived","InProgress","Completed"})
             {
-                ride=await Read(await driver.PutAsJsonAsync($"/api/v1/rides/{rideId}/status",new{status,version=ride["version"]!.GetValue<long>()}));
+                ride=await Read(await driver.PutAsJsonAsync($"/api/v1/rides/{rideId}/status",new{status,version=ride["version"]!.GetValue<long>(),collectedFare=status=="Completed"?(decimal?)30:null}));
                 var detail=await Read(await driver.GetAsync($"/api/v1/driver/rides/{rideId}"));
                 Assert.Equal("0591234567",detail["phone"]!.GetValue<string>());Assert.Equal("ملاحظة خاصة",detail["notes"]!.GetValue<string>());
             }
             Assert.Equal(HttpStatusCode.Conflict,(await driver.PutAsJsonAsync($"/api/v1/rides/{rideId}/status",new{status="Accepted",version=stale})).StatusCode);
             Assert.Equal(1,(await Read(await driver.GetAsync("/api/v1/driver/history")))["total"]!.GetValue<int>());
             Assert.Equal(0,(await Read(await other.GetAsync("/api/v1/driver/history")))["total"]!.GetValue<int>());
+            var earnings = await Read(await driver.GetAsync("/api/v1/driver/earnings"));
+            Assert.Equal(1, earnings["total"]!.GetValue<int>());
+            Assert.Equal(1, earnings["summary"]!["completedTrips"]!.GetValue<int>());
+            Assert.Equal(30m, earnings["summary"]!["totals"]![0]!["amount"]!.GetValue<decimal>());
+            foreach(var period in new[]{"week","month"}){
+                var periodEarnings=await Read(await driver.GetAsync($"/api/v1/driver/earnings?period={period}"));
+                Assert.Equal(1,periodEarnings["total"]!.GetValue<int>());
+                Assert.Equal(30m,periodEarnings["summary"]!["totals"]![0]!["amount"]!.GetValue<decimal>());
+                Assert.Equal(0,(await Read(await other.GetAsync($"/api/v1/driver/earnings?period={period}")))["total"]!.GetValue<int>());
+            }
+            Assert.Equal(HttpStatusCode.BadRequest,(await driver.GetAsync("/api/v1/driver/earnings?period=all")).StatusCode);
+            Assert.Equal(0, (await Read(await other.GetAsync("/api/v1/driver/earnings")))["total"]!.GetValue<int>());
+            Assert.Equal(HttpStatusCode.Unauthorized, (await anon.GetAsync("/api/v1/driver/earnings")).StatusCode);
             second=await Assign(second);var secondId=second["id"]!.GetValue<string>();
             var rejected=await Read(await driver.PutAsJsonAsync($"/api/v1/driver/rides/{secondId}/reject",new{version=second["version"]!.GetValue<long>()}));
             Assert.Equal("Rejected",rejected["status"]!.GetValue<string>());
@@ -105,7 +124,8 @@ public sealed class DriverAppTests
             }
             Assert.Equal(HttpStatusCode.Forbidden,(await driver.GetAsync("/api/v1/driver/me")).StatusCode);
             Assert.Equal(HttpStatusCode.Forbidden,(await driver.GetAsync($"/api/v1/driver/rides/{rideId}")).StatusCode);
+            Assert.Equal(HttpStatusCode.Unauthorized,(await anon.PostAsJsonAsync("/api/v1/auth/refresh",new{refreshToken=renewed["refreshToken"]!.GetValue<string>()})).StatusCode);
         }
-        finally{NpgsqlConnection.ClearAllPools();await using var drop=new NpgsqlCommand($"DROP DATABASE {name} WITH (FORCE)",admin);await drop.ExecuteNonQueryAsync();}
+        finally{NpgsqlConnection.ClearAllPools();await using var drop=new NpgsqlCommand($"DROP DATABASE {name} WITH (FORCE)",admin);if(Environment.GetEnvironmentVariable("DISPATCHPRO_KEEP_TEST_DATABASES")!="true") await drop.ExecuteNonQueryAsync();}
     }
 }

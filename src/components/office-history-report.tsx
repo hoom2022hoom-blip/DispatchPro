@@ -11,7 +11,7 @@ type History = Awaited<ReturnType<typeof api.reportHistory>>;
 const display = (value:unknown):string => value == null || value === '' ? '—' : typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value);
 const time = (value:unknown) => value ? new Date(String(value)).toLocaleString('ar', {timeZone:'Asia/Jerusalem'}) : '—';
 const statuses:Record<string,string> = {pending:'معلقة',assigned:'مرسلة','driver-accepted':'مقبولة','driver-arriving':'مقبولة',waiting:'انتظار',arrived:'وصل', 'in-progress':'بدأت',completed:'مكتملة',cancelled:'ملغاة'};
-const sources:Record<string,string> = {MANUAL:'يدوي',LANDLINE_ICALL:'LANDLINE',LANDLINE:'LANDLINE',WHATSAPP:'WHATSAPP'};
+const sources:Record<string,string> = {DRIVER_STREET:'راكب أو طلب من الشارع',MANUAL:'يدوي',LANDLINE_ICALL:'LANDLINE',LANDLINE:'LANDLINE',WHATSAPP:'WHATSAPP'};
 const detailLabels:Record<string,string> = {assignedAt:'وقت التعيين',sentAt:'وقت الإرسال',acceptedAt:'وقت القبول',completedAt:'وقت الإنهاء',completionTime:'وقت الإنهاء',pickedUpAt:'وقت الركوب',droppedOffAt:'وقت النزول',cancelledAt:'وقت الإلغاء',notes:'الملاحظات',reassignmentLog:'سجل تغيير السائق',dispatchHistory:'سجل الحالات',callTimestamp:'وقت الاتصال',updatedAt:'آخر تحديث',totalFare:'الأجرة',neighborhood:'الحي',street:'الشارع',latitude:'خط العرض',longitude:'خط الطول'};
 
 export function OfficeHistoryReport({data}:{data:OfficeData}) {

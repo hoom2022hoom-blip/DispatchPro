@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createCallStore } from '../../src/lib/call-store.ts';
 import { sendOfficeMirror } from './officecalls-mirror.mjs';
+import {parsePhone,cleanPhone} from '../../../scripts/officecalls-agent/phone.mjs';
 
 // OfficeCallsReceiver.ps1: one UTF-8 JSON line, number then caller, OK <eventId>.
 // Preserve the Android ring ID; never deduplicate by phone or a time window.
@@ -12,27 +13,28 @@ export function parseOfficeCall(data, config) {
   const raw = typeof data.number === 'string' && data.number.trim() ? data.number : data.caller;
   if (typeof raw !== 'string' || raw.length > 80) throw Error('Missing phone');
   // Only discard formatting, not arbitrary text that might become a different phone.
-  const normalized = raw.replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '').trim();
-  if (!/^[+0-9][0-9 ()-]*$/.test(normalized)) throw Error('Invalid phone');
-  let phone = normalized.replace(/[^0-9]/g, '');
-  if (/^0097[02]/.test(phone)) phone = phone.slice(5);
-  else if (/^97[02]/.test(phone)) phone = phone.slice(3);
-  if (phone.length === 9 && !phone.startsWith('0')) phone = '0' + phone;
-  if (phone.length < 3 || phone.length > 20) throw Error('Invalid phone length');
+  const normalized = cleanPhone(raw);
+  if (!normalized) throw Error('Invalid phone');
+  const parsed=parsePhone(data.phoneE164||data.phoneIdentity||normalized);
+  if(!parsed)throw Error('Invalid phone');
+  if((data.phoneE164||data.phoneIdentity)&&parsePhone(normalized)?.display!==parsed.display)throw Error('Phone display conflict');
+  const phone=parsed.display;
   if (!Number.isSafeInteger(data.timestamp) || !Number.isFinite(new Date(data.timestamp).getTime())) throw Error('Invalid timestamp');
   if(config.requireEventId && !data.eventId)throw Error('OfficeCalls ring eventId required');
   const eventId = data.eventId || 'legacy-' + createHash('sha256').update(JSON.stringify([config.siteId,config.officeId,data.device??'',phone,data.timestamp])).digest('hex');
   if (typeof eventId !== 'string' || !/^[A-Za-z0-9_-]{1,160}$/.test(eventId)) throw Error('Invalid ring ID');
-  return {eventId,source:'WHATSAPP',phone,timestamp:new Date(data.timestamp).toISOString(),siteId:config.siteId,officeId:config.officeId};
+  return {eventId,source:'WHATSAPP',phone,...(parsed.identity!==phone?{phoneIdentity:parsed.identity,phoneE164:parsed.e164}:{}),timestamp:new Date(data.timestamp).toISOString(),siteId:config.siteId,officeId:config.officeId};
 }
 
-export function createOfficeCallsTcpReceiver(config, {directory, host='0.0.0.0', report=()=>{}, mirror=config.mirror?.enabled?event=>sendOfficeMirror(event,{directory,host:config.mirror.host,port:config.mirror.port}):null}) {
+export function createOfficeCallsTcpReceiver(config, {directory, host='0.0.0.0', report=()=>{}, acceptEvent, mirror=config.mirror?.enabled?event=>sendOfficeMirror(event,{directory,host:config.mirror.host,port:config.mirror.port}):null}) {
   if (!config.siteId || !config.officeId || config.officeId !== config.tenantId) throw Error('Site and office identity required');
   const port = config.whatsappTcpPort ?? 5050;
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw Error('Invalid whatsappTcpPort');
   const store = createCallStore(directory);
   let writes=Promise.resolve();
   const server = createServer(socket => {
+    const address=(socket.remoteAddress||'').replace(/^::ffff:/,'');
+    if(!/^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(address)&&address!=='::1'){socket.destroy();return;}
     let buffer=Buffer.alloc(0), handled=false;
     socket.setTimeout(2500,()=>socket.destroy());
     socket.on('error',()=>{});
@@ -44,7 +46,9 @@ export function createOfficeCallsTcpReceiver(config, {directory, host='0.0.0.0',
       handled=true;socket.pause();
       void (async()=>{
         try {
-          const event=parseOfficeCall(JSON.parse(buffer.subarray(0,end).toString('utf8').replace(/^\uFEFF/,'')),config);
+          const raw=JSON.parse(buffer.subarray(0,end).toString('utf8').replace(/^\uFEFF/,''));
+          const event=parseOfficeCall(raw,config);
+          if(acceptEvent){await acceptEvent(event,raw);socket.end(`OK ${event.eventId}\n`);return;}
           // ACK only after durable, idempotent storage in LANDLINE's existing inbox.
           const commit=writes.then(async()=>{
             let original;

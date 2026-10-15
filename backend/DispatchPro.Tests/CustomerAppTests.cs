@@ -10,6 +10,9 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Xunit;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 
 namespace DispatchPro.Tests;
 public sealed class CustomerAppTests
@@ -26,7 +29,11 @@ public sealed class CustomerAppTests
         await using(var create=new NpgsqlCommand($"CREATE DATABASE {name}",admin))await create.ExecuteNonQueryAsync();
         try
         {
-            await using var factory=new ApiFactory(new NpgsqlConnectionStringBuilder(connection){Database=name}.ConnectionString);
+            await using var baseFactory=new ApiFactory(new NpgsqlConnectionStringBuilder(connection){Database=name}.ConnectionString);
+            var push=new RecordingCustomerPush();
+            await using var factory=baseFactory.WithWebHostBuilder(builder=>builder.ConfigureTestServices(services=>{
+                services.RemoveAll<IHostedService>();services.RemoveAll<ICustomerPushSender>();services.AddSingleton<ICustomerPushSender>(push);
+            }));
             using(var scope=factory.Services.CreateScope())
             {
                 var db=scope.ServiceProvider.GetRequiredService<TaxiDb>();await db.Database.MigrateAsync();
@@ -35,13 +42,18 @@ public sealed class CustomerAppTests
             using var customer=factory.CreateClient();using var other=factory.CreateClient();using var office=factory.CreateClient();using var anon=factory.CreateClient();
             var account=Guid.NewGuid();var secret=new string('a',64);
             var registration=new{tenant="customer-stage",accountId=account,deviceSecret=secret,fullName="زبون تجريبي",phone="0591234567"};
-            var first=await Read(await customer.PostAsJsonAsync("/api/v1/customer-app/register",registration));
+            var first=await Read(await customer.VerifiedRegistration(registration));
             customer.DefaultRequestHeaders.Authorization=new AuthenticationHeaderValue("Bearer",first["accessToken"]!.GetValue<string>());
-            Assert.Equal(account.ToString(),first["profile"]!["id"]!.GetValue<string>());Assert.False(first["profile"]!["phoneVerified"]!.GetValue<bool>());
-            await Read(await customer.PostAsJsonAsync("/api/v1/customer-app/register",registration));
-            Assert.Equal(HttpStatusCode.Conflict,(await anon.PostAsJsonAsync("/api/v1/customer-app/register",new{tenant="customer-stage",accountId=Guid.NewGuid(),deviceSecret=secret,fullName="Duplicate",phone="+970591234567"})).StatusCode);
+            var installation=Guid.NewGuid();var token="test-only-fcm-registration-token-not-real";
+            var pushInput=new{installationId=installation,token};
+            Assert.Equal(HttpStatusCode.Unauthorized,(await anon.PostAsJsonAsync("/api/v1/customer-app/push-device",pushInput)).StatusCode);
+            Assert.Equal(HttpStatusCode.NoContent,(await customer.PostAsJsonAsync("/api/v1/customer-app/push-device",pushInput)).StatusCode);
+            Assert.Equal(HttpStatusCode.NoContent,(await customer.PostAsJsonAsync("/api/v1/customer-app/push-device",pushInput)).StatusCode);
+            Assert.Equal(account.ToString(),first["profile"]!["id"]!.GetValue<string>());Assert.True(first["profile"]!["phoneVerified"]!.GetValue<bool>());
+            await Read(await customer.GetAsync("/api/v1/customer-app/me"));
+            Assert.Equal(HttpStatusCode.Forbidden,(await anon.PostAsJsonAsync("/api/v1/customer-app/register",new{tenant="customer-stage",accountId=Guid.NewGuid(),deviceSecret=secret,fullName="Duplicate",phone="+970591234567"})).StatusCode);
             Assert.Equal(HttpStatusCode.BadRequest,(await anon.PostAsJsonAsync("/api/v1/customer-app/register",new{tenant="customer-stage",accountId=Guid.NewGuid(),deviceSecret=secret,fullName="Invalid",phone="123"})).StatusCode);
-            var second=await Read(await other.PostAsJsonAsync("/api/v1/customer-app/register",new{tenant="customer-stage",accountId=Guid.NewGuid(),deviceSecret=secret,fullName="Another",phone="0591234568"}));
+            var second=await Read(await other.VerifiedRegistration(new{tenant="customer-stage",accountId=Guid.NewGuid(),deviceSecret=secret,fullName="Another",phone="0591234568"}));
             other.DefaultRequestHeaders.Authorization=new AuthenticationHeaderValue("Bearer",second["accessToken"]!.GetValue<string>());
             var login=await Read(await anon.PostAsJsonAsync("/api/v1/auth/login",new{tenant="customer-stage",username="customer-"+account.ToString("N"),password=secret}));Assert.NotNull(login["accessToken"]);
             Assert.Equal(HttpStatusCode.Unauthorized,(await anon.GetAsync("/api/v1/customer-app/history")).StatusCode);
@@ -83,15 +95,44 @@ public sealed class CustomerAppTests
             foreach(var pair in new[]{("Accepted","ACCEPTED","ACCEPTED"),("DriverArriving","DRIVER_ARRIVING","ARRIVING"),("Arrived","DRIVER_ARRIVED","ARRIVED"),("InProgress","IN_TRIP","STARTED"),("Completed","COMPLETED","COMPLETED")})
             {
                 var before=await Read(await customer.GetAsync("/api/v1/customer-app/updates"));
-                using var waiting=customer.GetAsync("/api/v1/customer-app/updates?cursor="+before["cursor"]!.GetValue<string>());
+                var waiting=customer.GetAsync("/api/v1/customer-app/updates?cursor="+before["cursor"]!.GetValue<string>());
                 var current=await Read(await driverClient.GetAsync($"/api/v1/driver/rides/{id}"));
-                await Read(await driverClient.PutAsJsonAsync($"/api/v1/rides/{id}/status",new{status=pair.Item1,version=current["version"]!.GetValue<long>()}));
+                await Read(await driverClient.PutAsJsonAsync($"/api/v1/rides/{id}/status",new{status=pair.Item1,version=current["version"]!.GetValue<long>(),collectedFare=pair.Item1=="Completed"?(decimal?)30:null}));
                 var pushed=await Read(await waiting.WaitAsync(TimeSpan.FromSeconds(8)));
                 Assert.Equal(pair.Item2,pushed["rides"]![0]!["workflowStatus"]!.GetValue<string>());
                 detail=await Read(await customer.GetAsync($"/api/v1/customer-app/rides/{id}"));Assert.Equal(pair.Item2,detail["workflowStatus"]!.GetValue<string>());Assert.Equal("Customer integration driver",detail["driver"]!["fullName"]!.GetValue<string>());Assert.Null(detail["vehicle"]);
                 var receptionOrder=(await Read(await office.GetAsync("/api/v1/reception/snapshot")))["rides"]![0]!;
                 Assert.Equal(pair.Item3,receptionOrder["dispatchStatus"]!.GetValue<string>());
                 Assert.Equal(pair.Item2,receptionOrder["workflowStatus"]!.GetValue<string>());
+                if(pair.Item1=="Accepted"){
+                    var message=Guid.NewGuid();var chatInput=new{id=message,text="أنا في الموقع"};
+                    await Read(await customer.PostAsJsonAsync($"/api/v1/customer-app/rides/{id}/chat",chatInput));
+                    await Read(await customer.PostAsJsonAsync($"/api/v1/customer-app/rides/{id}/chat",chatInput));
+                    Assert.Equal(HttpStatusCode.Forbidden,(await other.GetAsync($"/api/v1/customer-app/rides/{id}/chat")).StatusCode);
+                    Assert.Equal(HttpStatusCode.Forbidden,(await office.GetAsync($"/api/v1/driver/rides/{id}/chat")).StatusCode);
+                    var received=await Read(await driverClient.GetAsync($"/api/v1/driver/rides/{id}/chat"));Assert.Single(received["items"]!.AsArray());Assert.Equal("أنا في الموقع",received["items"]![0]!["text"]!.GetValue<string>());
+                    Assert.Equal(HttpStatusCode.Conflict,(await customer.PostAsJsonAsync($"/api/v1/customer-app/rides/{id}/chat",new{id=message,text="تغيير الرسالة"})).StatusCode);
+                    var reply=Guid.NewGuid();await Read(await driverClient.PostAsJsonAsync($"/api/v1/driver/rides/{id}/chat",new{id=reply,text="دقيقة وبكون عندك"}));
+                    var newest=await Read(await customer.GetAsync($"/api/v1/customer-app/rides/{id}/chat?limit=1"));Assert.Single(newest["items"]!.AsArray());Assert.Equal(reply.ToString(),newest["items"]![0]!["id"]!.GetValue<string>());
+                    var previous=await Read(await customer.GetAsync($"/api/v1/customer-app/rides/{id}/chat?before={reply}&limit=1"));Assert.Equal(message.ToString(),previous["items"]![0]!["id"]!.GetValue<string>());
+                    using var chatScope=factory.Services.CreateScope();var chatDb=chatScope.ServiceProvider.GetRequiredService<TaxiDb>();chatScope.ServiceProvider.GetRequiredService<TenantContext>().TenantId=await chatDb.Set<Tenant>().Where(t=>t.Slug=="customer-stage").Select(t=>t.Id).SingleAsync();Assert.DoesNotContain("أنا في الموقع",(await chatDb.Set<AuditLog>().SingleAsync(a=>a.Id==message)).Detail);
+                }
+                if(pair.Item1=="Arrived"){
+                    var arrival=detail["arrivalEventId"]!.GetValue<Guid>();
+                    Assert.Equal(HttpStatusCode.OK,(await driverClient.PutAsJsonAsync($"/api/v1/rides/{id}/status",new{status="Arrived",version=current["version"]!.GetValue<long>()})).StatusCode);
+                    Assert.Equal(arrival,(await Read(await customer.GetAsync($"/api/v1/customer-app/rides/{id}")))["arrivalEventId"]!.GetValue<Guid>());
+                    var worker=new CustomerPushWorker(factory.Services.GetRequiredService<IServiceScopeFactory>(),factory.Services.GetRequiredService<NotificationSignal>(),push,Microsoft.Extensions.Logging.Abstractions.NullLogger<CustomerPushWorker>.Instance);
+                    await worker.Scan(CancellationToken.None);await worker.Scan(CancellationToken.None);
+                    Assert.Single(push.Events);Assert.Equal((token,installation,account,arrival),push.Events[0]);
+                    Assert.Equal(HttpStatusCode.NotFound,(await other.PostAsJsonAsync($"/api/v1/customer-app/rides/{id}/arrival-ack",new{eventId=arrival})).StatusCode);
+                    Assert.Equal(HttpStatusCode.NoContent,(await customer.PostAsJsonAsync($"/api/v1/customer-app/rides/{id}/arrival-ack",new{eventId=arrival})).StatusCode);
+                    Assert.Equal(HttpStatusCode.NoContent,(await customer.PostAsJsonAsync($"/api/v1/customer-app/rides/{id}/arrival-ack",new{eventId=arrival})).StatusCode);
+                    Assert.True((await Read(await customer.GetAsync($"/api/v1/customer-app/rides/{id}")))["arrivalAcknowledged"]!.GetValue<bool>());
+                    using var check=factory.Services.CreateScope();var context=check.ServiceProvider.GetRequiredService<TenantContext>();
+                    context.TenantId=(await check.ServiceProvider.GetRequiredService<TaxiDb>().Set<Tenant>().SingleAsync(t=>t.Slug=="customer-stage")).Id;
+                    var registrations=await check.ServiceProvider.GetRequiredService<TaxiDb>().Set<AuditLog>().Where(a=>a.Action==CustomerPushStore.Registration).ToListAsync();Assert.Single(registrations);Assert.DoesNotContain(token,registrations[0].Detail);
+                    context.TenantId=Guid.NewGuid();Assert.Empty(await check.ServiceProvider.GetRequiredService<TaxiDb>().Set<AuditLog>().Where(a=>a.Action==CustomerPushStore.Registration).ToListAsync());
+                }
                 if(pair.Item1=="DriverArriving")
                 {
                     Assert.Single((await Read(await driverClient.GetAsync("/api/v1/driver/updates")))["data"]!["rides"]!.AsArray());
@@ -99,6 +140,8 @@ public sealed class CustomerAppTests
                 }
             }
             var updates=await Read(await customer.GetAsync("/api/v1/customer-app/updates"));Assert.Equal("COMPLETED",Assert.Single(updates["rides"]!.AsArray())!["status"]!.GetValue<string>());
+            Assert.Equal(HttpStatusCode.Forbidden,(await customer.GetAsync($"/api/v1/customer-app/rides/{id}/chat")).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden,(await driverClient.PostAsJsonAsync($"/api/v1/driver/rides/{id}/chat",new{id=Guid.NewGuid(),text="بعد انتهاء الرحلة"})).StatusCode);
             Assert.Equal(1,(await Read(await customer.GetAsync("/api/v1/customer-app/history")))["total"]!.GetValue<int>());Assert.Equal(0,(await Read(await other.GetAsync("/api/v1/customer-app/history")))["total"]!.GetValue<int>());
             var scheduledId=Guid.NewGuid();var scheduled=DateTimeOffset.UtcNow.AddDays(1);
             await Read(await customer.PostAsJsonAsync("/api/v1/customer-app/rides",new{id=scheduledId,pickup=new{addressText="عنوان يدوي"},destination="المستشفى",scheduledAt=scheduled}));
@@ -111,4 +154,9 @@ public sealed class CustomerAppTests
         }
         finally{NpgsqlConnection.ClearAllPools();await using var drop=new NpgsqlCommand($"DROP DATABASE {name} WITH (FORCE)",admin);await drop.ExecuteNonQueryAsync();}
     }
+}
+public sealed class RecordingCustomerPush : ICustomerPushSender {
+    public bool Enabled=>true;
+    public List<(string,Guid,Guid,Guid)> Events {get;}=[];
+    public Task<CustomerPushResult> Send(string token,Guid installation,Guid actorId,Guid eventId,CancellationToken cancellation){Events.Add((token,installation,actorId,eventId));return Task.FromResult(CustomerPushResult.Sent);}
 }

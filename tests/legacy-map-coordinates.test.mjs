@@ -1,0 +1,7 @@
+import test from 'node:test';import assert from 'node:assert/strict';import{registerHooks}from'node:module';import React from'react';import TestRenderer,{act}from'react-test-renderer';import{receptionRenderHooks}from'./helpers/reception-render.mjs';
+test('legacy maps reject absent, placeholder and invalid coordinates and disclose missing GPS age',async()=>{
+ const hooks=receptionRenderHooks(),before=globalThis.fetch;globalThis.fetch=async()=>({ok:true,json:async()=>({version:8,sources:{},layers:[]})});
+ const stub=registerHooks({resolve(s,c,next){if(s==='react-map-gl/maplibre')return{url:'data:text/javascript,export default "legacy-map";export const Marker="marker",AttributionControl="attribution";',shortCircuit:true};if(s.endsWith('.css'))return{url:'data:text/javascript,export {};',shortCircuit:true};return next(s,c);}});let view;
+ try{const{MapView}=await import('../src/components/map-view.tsx');const points=[{x:32.22,y:35.25},{x:0,y:0},null,{x:NaN,y:35},{x:91,y:35},{x:32,y:181}];await act(async()=>{view=TestRenderer.create(React.createElement(MapView,{drivers:points.map((location,i)=>({id:'d'+i,name:'QA '+i,status:'available',location})),rides:points.map((coords,i)=>({id:'r'+i,pickup:{coords}}))}));});const markers=view.root.findAllByType('marker');assert.equal(markers.length,2);assert.ok(markers.every(m=>m.props.latitude===32.22&&m.props.longitude===35.25));assert.match(JSON.stringify(view.toJSON()),/وقت تحديث GPS غير متاح/);
+ }finally{await act(async()=>view?.unmount());stub.deregister();hooks.deregister();globalThis.fetch=before;}
+});

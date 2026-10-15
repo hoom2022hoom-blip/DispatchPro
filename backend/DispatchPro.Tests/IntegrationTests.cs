@@ -6,6 +6,8 @@ using DispatchPro.Api.Domain;
 using DispatchPro.Api.Infrastructure;
 using DispatchPro.Api.Services;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -21,7 +23,7 @@ public sealed class PostgresFactAttribute : FactAttribute
 }
 public sealed class ApiFactory(string connection) : WebApplicationFactory<Program>
 {
-    protected override void ConfigureWebHost(IWebHostBuilder builder) => builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>
+    protected override void ConfigureWebHost(IWebHostBuilder builder) => builder.ConfigureTestServices(services=>{services.RemoveAll<ICustomerSmsSender>();services.AddSingleton<ICustomerSmsSender,TestCustomerSms>();}).ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>
     {
         ["ConnectionStrings:Taxi"] = connection,
         ["Auth:SigningKey"] = "integration-test-only-signing-key-0123456789",
@@ -105,7 +107,7 @@ public sealed class IntegrationTests
             var driverRole = roles.EnumerateArray().Single(r => r.GetProperty("name").GetString() == "Driver").GetProperty("id").GetGuid();
             var user = await Json(await a.PostAsJsonAsync("/api/v1/users", new { username = "driver", password = "Driver-test-password-123!", roleId = driverRole }));
             var driver = await Json(await a.PostAsJsonAsync("/api/v1/drivers", new { userId = user.GetProperty("id").GetGuid(), fullName = "Test driver", status = "Available" }));
-            ride = await Json(await a.PutAsJsonAsync($"/api/v1/rides/{rideId}/assignment", new { driverId = driver.GetProperty("id").GetGuid(), version = ride.GetProperty("version").GetInt64() }));
+            ride = await Json(await a.PutAsJsonAsync($"/api/v1/rides/{rideId}/assignment", new { driverId = driver.GetProperty("id").GetGuid(), version = adjusted.GetProperty("version").GetInt64() }));
             var secondRide = await Json(await a.PostAsJsonAsync("/api/v1/ride-requests", request));
             Assert.Equal(HttpStatusCode.Conflict, (await a.PutAsJsonAsync($"/api/v1/rides/{secondRide.GetProperty("id").GetGuid()}/assignment", new { driverId = driver.GetProperty("id").GetGuid(), version = secondRide.GetProperty("version").GetInt64() })).StatusCode);
             using var d = factory.CreateClient();
@@ -114,7 +116,7 @@ public sealed class IntegrationTests
             Assert.Equal(HttpStatusCode.Forbidden, (await d.GetAsync("/api/v1/customers")).StatusCode);
             Assert.Equal(HttpStatusCode.NotFound, (await d.GetAsync($"/api/v1/driver/rides/{secondRide.GetProperty("id").GetGuid()}")).StatusCode);
             Assert.Equal(HttpStatusCode.Forbidden, (await d.PutAsJsonAsync($"/api/v1/rides/{rideId}/price/adjustment", adjustment)).StatusCode);
-            Assert.False((await Json(await d.GetAsync($"/api/v1/driver/rides/{rideId}"))).TryGetProperty("phone", out _));
+            Assert.Equal(System.Text.Json.JsonValueKind.Null, (await Json(await d.GetAsync($"/api/v1/driver/rides/{rideId}"))).GetProperty("phone").ValueKind);
             foreach (var status in new[] { "Accepted", "Arrived", "InProgress", "Completed" })
             {
                 ride = await Json(await d.PutAsJsonAsync($"/api/v1/rides/{rideId}/status", new { status, version = ride.GetProperty("version").GetInt64() }));

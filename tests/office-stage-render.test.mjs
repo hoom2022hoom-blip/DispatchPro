@@ -23,9 +23,11 @@ test('Office settings enforce access in UI; user edits preserve account and role
 test('Order report uses server totals, resets pagination on filters and rejects reversed date range',async()=>{
  const hooks=receptionRenderHooks();const stub=registerHooks({resolve(s,c,next){if(s==='@/lib/reception-api')return{url:'data:text/javascript,export const apiReceptionBackend=globalThis.orderStageApi;',shortCircuit:true};return next(s,c);}});
  const calls=[];let renderer;const wait=()=>new Promise(r=>setTimeout(r,220));
- globalThis.orderStageApi={reportHistory:async q=>{calls.push(q);return{total:51,page:q.page,pageSize:50,items:[{id:'o',orderNumber:1,passengerName:'Customer',notes:'saved detail'}]};}};
+ globalThis.orderStageApi={reportDrivers:async()=>[],reportHistory:async q=>{calls.push(q);return{total:51,page:q.page,pageSize:50,items:[{id:'o',orderNumber:1,passengerName:'Customer',notes:'saved detail'}]};}};
  try{const {OfficeOrderReport}=await import('../src/components/office-order-report.tsx');await act(async()=>{renderer=TestRenderer.create(React.createElement(OfficeOrderReport,{today:'2026-01-02',drivers:[]}));await wait();});await act(wait);
-  assert.match(JSON.stringify(renderer.toJSON()),/51/);assert.match(JSON.stringify(renderer.toJSON()),/saved detail/);
+  assert.match(JSON.stringify(renderer.toJSON()),/51/);assert.doesNotMatch(JSON.stringify(renderer.toJSON()),/saved detail/);
+  await act(async()=>renderer.root.findAllByType('button').find(b=>b.children.join('')==='فتح التفاصيل').props.onClick());
+  assert.match(JSON.stringify(renderer.toJSON()),/saved detail/);
   await act(async()=>{renderer.root.findAllByType('button').find(b=>b.children.join('')==='التالي').props.onClick();await wait();});await act(wait);assert.equal(calls.at(-1).page,2);
   await act(async()=>{renderer.root.findAllByType('input').find(i=>i.props.placeholder).props.onChange({target:{value:'059'}});await wait();});await act(wait);assert.equal(calls.at(-1).page,1);assert.equal(calls.at(-1).search,'059');
   const count=calls.length;await act(async()=>{renderer.root.findAllByType('input').find(i=>i.props.type==='date').props.onChange({target:{value:'2026-02-02'}});await wait();});assert.equal(calls.length,count);assert.match(JSON.stringify(renderer.toJSON()),/تاريخ البداية/);

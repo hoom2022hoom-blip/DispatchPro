@@ -7,6 +7,7 @@
 -->
 <full-backup-content>
     <exclude domain="sharedpref" path="office_calls_auth.xml" />
+        <exclude domain="database" path="." />
     <!--
    <include domain="sharedpref" path="."/>
    <exclude domain="sharedpref" path="device.xml"/>

@@ -27,13 +27,13 @@ test('standalone Driver Mobile host admits GPS to authenticated proxy while bloc
 });
 
 test('GPS sends fresh movement and heartbeat, suppresses stationary/background/offline updates and stops cleanly',async()=>{
- const savedNavigator=Object.getOwnPropertyDescriptor(globalThis,'navigator');const savedDocument=globalThis.document;
+ const savedNavigator=Object.getOwnPropertyDescriptor(globalThis,'navigator');const savedDocument=globalThis.document;const savedWindow=globalThis.window;
  const originalTimer=globalThis.setTimeout,originalClear=globalThis.clearTimeout,originalNow=Date.now;
  let now=100000,latitude=32.22,longitude=35.25,accuracy=10,next,reads=0;
  const sent=[];let stop;
  try{
-  Date.now=()=>now;globalThis.setTimeout=(fn,ms,...args)=>{if(ms!==20000&&ms!==60000)return originalTimer(fn,ms,...args);next=fn;return 1;};globalThis.clearTimeout=id=>{if(id===1)next=undefined;else originalClear(id);};
-  globalThis.document={hidden:false};Object.defineProperty(globalThis,'navigator',{configurable:true,value:{onLine:true,geolocation:{getCurrentPosition(ok,_error,options){reads++;assert.equal(options.enableHighAccuracy,true);assert.equal(options.maximumAge,0);ok({coords:{latitude,longitude,accuracy},timestamp:now});}}}});
+  Date.now=()=>now;globalThis.setTimeout=(fn,ms,...args)=>{if(ms!==10000&&ms!==20000&&ms!==60000)return originalTimer(fn,ms,...args);next=fn;return 1;};globalThis.clearTimeout=id=>{if(id===1)next=undefined;else originalClear(id);};
+  globalThis.window={addEventListener(){},removeEventListener(){}};globalThis.document={hidden:false,addEventListener(){},removeEventListener(){}};Object.defineProperty(globalThis,'navigator',{configurable:true,value:{onLine:true,geolocation:{getCurrentPosition(ok,_error,options){reads++;assert.equal(options.enableHighAccuracy,true);assert.equal(options.maximumAge,0);ok({coords:{latitude,longitude,accuracy},timestamp:now});}}}});
   const settle=()=>new Promise(resolve=>setImmediate(resolve));
   stop=startDriverLocation(async value=>{sent.push(value);},()=>{});await settle();assert.equal(sent.length,1);
   now+=20000;next();await settle();assert.equal(sent.length,1);
@@ -43,7 +43,7 @@ test('GPS sends fresh movement and heartbeat, suppresses stationary/background/o
   const before=reads;document.hidden=true;next();assert.equal(reads,before);
   document.hidden=false;navigator.onLine=false;next();assert.equal(reads,before);
   stop();assert.equal(next,undefined);
- }finally{stop?.();Date.now=originalNow;globalThis.setTimeout=originalTimer;globalThis.clearTimeout=originalClear;if(savedDocument===undefined)delete globalThis.document;else globalThis.document=savedDocument;if(savedNavigator)Object.defineProperty(globalThis,'navigator',savedNavigator);else delete globalThis.navigator;}
+ }finally{stop?.();Date.now=originalNow;globalThis.setTimeout=originalTimer;globalThis.clearTimeout=originalClear;if(savedWindow===undefined)delete globalThis.window;else globalThis.window=savedWindow;if(savedDocument===undefined)delete globalThis.document;else globalThis.document=savedDocument;if(savedNavigator)Object.defineProperty(globalThis,'navigator',savedNavigator);else delete globalThis.navigator;}
 });
 
 test('dispatch proxy forwards employee-scoped GPS/settings and rejects arbitrary driver location paths',async()=>{

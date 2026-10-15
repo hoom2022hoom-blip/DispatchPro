@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <application>
+        <!-- Compose preview has no role on the phone. Local UI test host stays private. -->
+        <activity android:name="androidx.compose.ui.tooling.PreviewActivity" tools:node="remove" />
+        <activity android:name="androidx.activity.ComponentActivity" android:exported="false"
+            tools:replace="android:exported" />
+    </application>
+</manifest>

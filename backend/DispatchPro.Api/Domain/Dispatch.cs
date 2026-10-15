@@ -14,6 +14,7 @@ public sealed class DriverLocation : TenantEntity
 {
     public Guid DriverId { get; set; }
     [JsonIgnore] public Point Position { get; set; } = null!;
+    public string Source { get; set; } = "driver";
     public double Accuracy { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }

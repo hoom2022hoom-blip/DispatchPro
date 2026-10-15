@@ -3,7 +3,8 @@
 export type NotificationPermissionResult = 'granted' | 'denied' | 'default' | 'unsupported';
 export interface DriverNotifications {
   requestPermission(): Promise<NotificationPermissionResult>;
-  show(title: string, body: string): Promise<void>;
+  show(title: string, body: string, tag?:string): Promise<void>;
+  close?(tag:string):Promise<void>;
 }
 export interface DriverPlatform {
   fetch: typeof fetch;
@@ -16,16 +17,18 @@ export function browserNotifications(): DriverNotifications {
       if (typeof Notification === 'undefined') return 'unsupported';
       try { return await Notification.requestPermission(); } catch { return 'unsupported'; }
     },
-    async show(title, body) {
+    async show(title, body,tag) {
       if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
       try {
         const registration = 'serviceWorker' in navigator ? await navigator.serviceWorker.getRegistration() : undefined;
-        if (registration?.active) await registration.showNotification(title, { body });
-        else new Notification(title, { body });
+        if (registration?.active) await registration.showNotification(title, { body,tag });
+        else {const notification=new Notification(title, { body,tag });if(tag)browserNotices.set(tag,notification);}
       } catch { /* iOS/browser restrictions leave the durable in-app feed available. */ }
     },
+    async close(tag){browserNotices.get(tag)?.close();browserNotices.delete(tag);try{const registration=await navigator.serviceWorker?.getRegistration();for(const notice of await registration?.getNotifications({tag})??[])notice.close();}catch{}},
   };
 }
+const browserNotices=new Map<string,Notification>();
 
 let platform: DriverPlatform | undefined;
 export function configureDriverPlatform(value: DriverPlatform) { platform = value; }

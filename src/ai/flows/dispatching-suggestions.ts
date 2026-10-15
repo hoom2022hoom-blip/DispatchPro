@@ -1,5 +1,7 @@
 'use server';
 
+import { authorizeLegacyUser } from '@/lib/legacy-admin-authorization';
+
 /**
  * @fileOverview A dispatching suggestions AI agent.
  *
@@ -43,6 +45,7 @@ const DispatchingSuggestionsOutputSchema = z.object({
 export type DispatchingSuggestionsOutput = z.infer<typeof DispatchingSuggestionsOutputSchema>;
 
 export async function getDispatchingSuggestions(input: DispatchingSuggestionsInput): Promise<DispatchingSuggestionsOutput> {
+  if (!await authorizeLegacyUser()) throw new Error("AI authorization required.");
   return dispatchingSuggestionsFlow(input);
 }
 

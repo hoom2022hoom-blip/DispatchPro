@@ -4,7 +4,7 @@ namespace DispatchPro.Api.Domain;
 // These are office reception records, not mobile-app customer registrations.
 public sealed class ReceptionOrder : TenantEntity
 {
-    public Guid RideRequestId { get; set; }
+    public Guid? RideRequestId { get; set; }
     public string ExternalId { get; set; } = "";
     public string? EventId { get; set; }
     public string Day { get; set; } = "";

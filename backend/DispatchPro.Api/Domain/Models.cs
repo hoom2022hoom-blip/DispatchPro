@@ -40,6 +40,13 @@ public sealed class Driver : TenantEntity
     public DateOnly? HireDate { get; set; }
     public string Notes { get; set; } = "";
     public Guid? CurrentVehicleId { get; set; }
+    public bool DriverAppEnabled { get; set; } = true;
+    public bool GpsEnabled { get; set; } = true;
+    public bool VoiceEnabled { get; set; } = true;
+    public bool CanListen { get; set; } = true;
+    public bool CanTalkPublic { get; set; } = true;
+    public bool CanTalkPrivate { get; set; } = true;
+    public bool IsVoiceBlocked { get; set; }
 }
 public sealed class DriverVehicleAssignment : TenantEntity
 {
@@ -56,7 +63,7 @@ public sealed class QueueLocation : TenantEntity
     public bool IsActive { get; set; } = true;
     public int SortOrder { get; set; }
 }
-public sealed class Vehicle : TenantEntity { public Guid DriverId { get; set; } public Guid VehicleClassId { get; set; } public string Plate { get; set; } = ""; public string Make { get; set; } = ""; public string Model { get; set; } = ""; public string Color { get; set; } = ""; public int? Year { get; set; } public bool Active { get; set; } = true; public string Status { get; set; } = "ACTIVE"; }
+public sealed class Vehicle : TenantEntity { public Guid DriverId { get; set; } public Guid VehicleClassId { get; set; } public string Plate { get; set; } = ""; public string Make { get; set; } = ""; public string Model { get; set; } = ""; public string Color { get; set; } = ""; public int? Year { get; set; } public DateOnly? RegistrationExpiryDate { get; set; } public DateOnly? InsuranceExpiryDate { get; set; } public bool Active { get; set; } = true; public string Status { get; set; } = "ACTIVE"; }
 public sealed class VehicleClass : TenantEntity { public string Name { get; set; } = ""; public decimal Multiplier { get; set; } = 1; }
 // Append states: existing persisted integer values must never be renumbered.
 public enum RideStatus { Pending, Assigned, Accepted, Arrived, InProgress, Completed, Cancelled, DriverArriving, Rejected, NoDriverAvailable }
@@ -82,7 +89,26 @@ public sealed class RideRequest : TenantEntity
     public DateTimeOffset? ScheduledAt { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
-public sealed class Ride : TenantEntity { public Guid RideRequestId { get; set; } public Guid? DriverId { get; set; } public RideStatus Status { get; set; } public long Version { get; set; } public string DispatchMode { get; set; } = "MANUAL"; public DateTimeOffset? OfferExpiresAt { get; set; } }
+public sealed class Ride : TenantEntity { public Guid RideRequestId { get; set; } public Guid? DriverId { get; set; } public RideStatus Status { get; set; } public long Version { get; set; } public string DispatchMode { get; set; } = "MANUAL"; public DateTimeOffset? OfferExpiresAt { get; set; }
+    public string FareMode { get; set; } = "OFFICE_MANUAL";
+    public string? FareSource { get; set; }
+    public string Currency { get; set; } = "ILS";
+    public decimal? FinalFare { get; set; }
+    public decimal? MeterCalculatedFare { get; set; }
+    public decimal? DistanceKm { get; set; }
+    public int? DurationSeconds { get; set; }
+    public int? WaitingSeconds { get; set; }
+    public DateTimeOffset? FareCalculatedAt { get; set; }
+    public DateTimeOffset? FareUpdatedAt { get; set; }
+    public Guid? FareUpdatedBy { get; set; }
+    public DateTimeOffset? MeterStartedAt { get; set; }
+    public DateTimeOffset? MeterStoppedAt { get; set; }
+    [JsonIgnore] public string? MeterTariff { get; set; }
+    [JsonIgnore] public DateTimeOffset? MeterLastAt { get; set; }
+    [JsonIgnore] public double? MeterLastLatitude { get; set; }
+    [JsonIgnore] public double? MeterLastLongitude { get; set; }
+    [JsonIgnore] public double? MeterLastAccuracy { get; set; }
+}
 public sealed class FeatureFlag : TenantEntity { public string Key { get; set; } = ""; public bool Enabled { get; set; } }
 public sealed class AuditLog : TenantEntity { public Guid ActorId { get; set; } public string Action { get; set; } = ""; public Guid EntityId { get; set; } public string Detail { get; set; } = ""; public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow; }
 public enum PricingMode { Manual, FixedRoute, GpsMeter, Hybrid }
@@ -93,6 +119,8 @@ public sealed class PricingRule : TenantEntity
     public PricingMode Mode { get; set; }
     public decimal BaseFare { get; set; }
     public decimal PerKm { get; set; }
+    public decimal IncludedDistanceKm { get; set; }
+    public decimal ExtraFee { get; set; }
     public decimal PerMinute { get; set; }
     public decimal MinimumFare { get; set; }
     public decimal WaitingPerMinute { get; set; }

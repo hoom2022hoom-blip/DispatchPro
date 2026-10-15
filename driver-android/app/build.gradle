@@ -1,4 +1,18 @@
-plugins { id 'com.android.application' }
+plugins { id 'com.android.application'; id 'com.google.gms.google-services' }
+def driverQaConfig = providers.gradleProperty('dispatchProDriverQaConfig').isPresent() ? new groovy.json.JsonSlurper().parse(file(providers.gradleProperty('dispatchProDriverQaConfig').get())) : null
+
+// Retain public BuildConfig identifiers for compatibility; the Google Services
+// plugin generates Firebase's runtime resources. Overrides must match the file.
+def firebaseConfig = { String audience, String field ->
+    def configFile = file("src/${audience}/google-services.json")
+    if (!configFile.exists()) configFile = file('google-services.json')
+    if (!configFile.exists()) return ''
+    def config = new groovy.json.JsonSlurper().parse(configFile)
+    def packageName = audience == 'driver' ? 'com.dispatchpro.driver' : 'com.dispatchpro.customer'
+    def client = config.client.find { it.client_info?.android_client_info?.package_name == packageName }
+    if (!client) throw new GradleException("Firebase config lacks ${packageName}")
+    return ['APP_ID':client.client_info?.mobilesdk_app_id,'API_KEY':client.api_key?.getAt(0)?.current_key,'SENDER_ID':config.project_info?.project_number,'PROJECT_ID':config.project_info?.project_id][field]?.toString() ?: ''
+}
 
 android {
     namespace 'com.dispatchpro.driver'
@@ -7,13 +21,120 @@ android {
         applicationId 'com.dispatchpro.driver'
         minSdk 24
         targetSdk 36
-        versionCode 3
-        versionName '0.1.2'
-        buildConfigField 'String', 'DEFAULT_API_URL', '"https://mall-pressing-sept-developmental.trycloudflare.com"'
+        versionCode 25
+        versionName '5.1.6'
+        def apiOrigin = providers.gradleProperty('dispatchProApiOrigin').getOrElse('https://api.nablustaxi.com')
+        def webOrigin = providers.gradleProperty('dispatchProWebOrigin').getOrElse('https://office.nablustaxi.com')
+        if (![apiOrigin,webOrigin].every { it ==~ /https:\/\/[a-zA-Z0-9.-]+(:[0-9]+)?/ }) throw new GradleException('Build requires HTTPS origins without paths or credentials')
+        buildConfigField 'String', 'DEFAULT_API_URL', '"'+apiOrigin+'"'
+        buildConfigField 'String', 'DEFAULT_WEB_URL', '"'+webOrigin+'"'
+        buildConfigField 'boolean', 'CUSTOMER_LOCAL_DEBUG', 'false'
+        buildConfigField 'boolean', 'DRIVER_QA', 'false'
+        manifestPlaceholders = [externalPttPermission:'com.dispatchpro.permission.EXTERNAL_PTT_OWNER']
+    }
+    flavorDimensions += 'audience'
+    signingConfigs {
+        if (driverQaConfig != null) qa {
+            storeFile file(driverQaConfig.qaKeystore)
+            storePassword driverQaConfig.qaKeyPassword
+            keyAlias 'driver-qa'
+            keyPassword driverQaConfig.qaKeyPassword
+        }
+    }
+    productFlavors {
+        driver {
+            dimension 'audience'
+            if (providers.gradleProperty('dispatchProDriverQaAssets').isPresent()) versionNameSuffix '-qa.1'
+            manifestPlaceholders = [entryActivity:'com.dispatchpro.driver.MainActivity',appLabel:'NM DRIVER']
+            ['APP_ID':'dispatchProDriverFirebaseAppId','API_KEY':'dispatchProDriverFirebaseApiKey','SENDER_ID':'dispatchProDriverFirebaseSenderId','PROJECT_ID':'dispatchProDriverFirebaseProjectId'].each { field, property ->
+                def value=firebaseConfig('driver',field)
+                if (providers.gradleProperty(property).isPresent() && providers.gradleProperty(property).get() != value) throw new GradleException('Firebase override differs from official driver config')
+                if (!(value ==~ /[a-zA-Z0-9:_-]*/)) throw new GradleException('Invalid Firebase public configuration')
+                buildConfigField 'String', 'DRIVER_FIREBASE_'+field, '"'+value+'"'
+            }
+        }
+        driverQa {
+            dimension 'audience'
+            applicationId 'com.dispatchpro.driver.qa'
+            versionCode driverQaConfig?.qaVersionCode ?: 1
+            versionName driverQaConfig?.qaVersionName ?: '5.1.6-qa.2'
+            manifestPlaceholders = [entryActivity:'com.dispatchpro.driver.MainActivity',appLabel:'NM DRIVER QA — اختبار',externalPttPermission:'com.dispatchpro.driver.qa.permission.EXTERNAL_PTT_OWNER',qaNetworkSecurityConfig:driverQaConfig?.qaTlsRes?'@xml/qa_local_network':'@xml/qa_default_network']
+            buildConfigField 'boolean', 'DRIVER_QA', 'true'
+            def origin=driverQaConfig?.publicOrigin ?: 'https://driver-qa.invalid'
+            if (!(origin ==~ /https:\/\/[a-zA-Z0-9.-]+/) && !(origin=='https://localhost:9443'&&driverQaConfig?.qaTlsRes)) throw new GradleException('QA requires its own HTTPS origin or certificate-scoped USB localhost')
+            buildConfigField 'String', 'DEFAULT_API_URL', '"'+origin+'"'
+            buildConfigField 'String', 'DEFAULT_WEB_URL', '"'+origin+'"'
+            ['APP_ID','API_KEY','SENDER_ID','PROJECT_ID'].each { field -> buildConfigField 'String','DRIVER_FIREBASE_'+field,'""' }
+        }
+        radio {
+            dimension 'audience'
+            applicationId 'com.dispatchpro.radio'
+            versionCode 11
+            versionName '1.0.9'
+            manifestPlaceholders = [entryActivity:'com.dispatchpro.driver.RadioActivity',appLabel:'مخشير TNM']
+        }
+        customer {
+            dimension 'audience'
+            applicationId 'com.dispatchpro.customer'
+            versionCode 18
+            versionName '0.2.3'
+            manifestPlaceholders = [entryActivity:'com.dispatchpro.driver.CustomerActivity',appLabel:'NM TAXI']
+            // Firebase Android identifiers are public config, never Admin credentials.
+            ['APP_ID':'dispatchProCustomerFirebaseAppId','API_KEY':'dispatchProCustomerFirebaseApiKey','SENDER_ID':'dispatchProCustomerFirebaseSenderId','PROJECT_ID':'dispatchProCustomerFirebaseProjectId'].each { field, property ->
+                def value=firebaseConfig('customer',field)
+                if (providers.gradleProperty(property).isPresent() && providers.gradleProperty(property).get() != value) throw new GradleException('Firebase override differs from official customer config')
+                if (!(value ==~ /[a-zA-Z0-9:_-]*/)) throw new GradleException('Invalid Firebase public configuration')
+                buildConfigField 'String', 'CUSTOMER_FIREBASE_'+field, '"'+value+'"'
+            }
+        }
     }
     buildFeatures { buildConfig true }
+    sourceSets.driverQa.java.srcDir('src/driver/java')
+    sourceSets.driverQa.res.srcDir('src/driver/res')
+    if (driverQaConfig != null) sourceSets.driverQa.assets.srcDir(driverQaConfig.qaAssets)
+    if (driverQaConfig?.qaTlsRes) sourceSets.driverQa.res.srcDir(driverQaConfig.qaTlsRes)
+    // A separate driver-only QA bundle overrides assets without touching live web output.
+    if (providers.gradleProperty('dispatchProDriverQaAssets').isPresent()) {
+        sourceSets.driver.assets.srcDir(providers.gradleProperty('dispatchProDriverQaAssets').get())
+    }
     // Field APK: signed with the existing local Android development key.
     // Keep the same key for upgrades; production signing can be supplied later.
-    buildTypes { release { minifyEnabled false; debuggable false; signingConfig signingConfigs.debug } }
+    buildTypes {
+        debug { buildConfigField 'boolean', 'CUSTOMER_LOCAL_DEBUG', providers.gradleProperty('customerLocalDebug').getOrElse('false') == 'true' ? 'true' : 'false' }
+        release {
+            // Opt in for the verified Driver/TNM release task without changing
+            // the Customer build defaults or the existing signing certificate.
+            minifyEnabled providers.gradleProperty('dispatchProMobileR8').getOrElse('false') == 'true'
+            shrinkResources providers.gradleProperty('dispatchProMobileR8').getOrElse('false') == 'true'
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            debuggable false; signingConfig driverQaConfig != null ? signingConfigs.qa : signingConfigs.debug; buildConfigField 'boolean', 'CUSTOMER_LOCAL_DEBUG', 'false'
+        }
+    }
     compileOptions { sourceCompatibility JavaVersion.VERSION_11; targetCompatibility JavaVersion.VERSION_11 }
+    testOptions { unitTests.includeAndroidResources = true }
+}
+tasks.configureEach { task ->
+    if (task.name ==~ /processRadio.*GoogleServices/) task.enabled = file('src/radio/google-services.json').exists()
+    if (task.name ==~ /processDriverQa.*GoogleServices/) task.enabled = false
+}
+gradle.taskGraph.whenReady { graph ->
+    if (driverQaConfig != null && graph.allTasks.any { it.name ==~ /(?:assemble|bundle|package)(?:Driver(?!Qa)|Customer|Radio).*/ })
+        throw new GradleException('QA signing configuration may only package driverQa')
+}
+tasks.withType(Test).configureEach {
+    def radioMaven = providers.environmentVariable('TNM_RADIO_TEST_MAVEN_REPO').orNull
+    if (radioMaven) systemProperty 'maven.repo.local', radioMaven
+}
+
+dependencies {
+    testDriverQaImplementation 'junit:junit:4.13.2'
+    testDriverQaImplementation 'org.robolectric:robolectric:4.17'
+    driverQaImplementation platform('com.google.firebase:firebase-bom:34.19.0')
+    driverQaImplementation 'com.google.firebase:firebase-messaging'
+    testRadioImplementation 'junit:junit:4.13.2'
+    testRadioImplementation 'org.robolectric:robolectric:4.17'
+    driverImplementation platform('com.google.firebase:firebase-bom:34.19.0')
+    driverImplementation 'com.google.firebase:firebase-messaging'
+    customerImplementation platform('com.google.firebase:firebase-bom:34.19.0')
+    customerImplementation 'com.google.firebase:firebase-messaging'
 }

@@ -13,9 +13,12 @@ public static class Permissions
 }
 public sealed class TokenService(IConfiguration config)
 {
-    public string Issue(User user)
+    public string Issue(User user, string? sessionId = null, string? customerSessionId = null, string? application = null)
     {
-        var claims = new[] { new Claim("sub", user.Id.ToString()), new Claim("tenant", user.TenantId.ToString()) };
+        var claims = new List<Claim> { new Claim("sub", user.Id.ToString()), new Claim("tenant", user.TenantId.ToString()) };
+        if(application is not null)claims.Add(new Claim("mobile_app",application));
+        if(sessionId is not null)claims.Add(new Claim("office_session",sessionId));
+        if(customerSessionId is not null)claims.Add(new Claim("customer_session",customerSessionId));
         return new JwtSecurityTokenHandler().WriteToken(new JwtSecurityToken(config["Auth:Issuer"] ?? "DispatchPro", config["Auth:Audience"] ?? "DispatchPro", claims, expires: DateTime.UtcNow.AddMinutes(30), signingCredentials: new SigningCredentials(new SymmetricSecurityKey(Encoding.UTF8.GetBytes(config["Auth:SigningKey"]!)), SecurityAlgorithms.HmacSha256)));
     }
 }
@@ -25,7 +28,7 @@ public static class Seed
     {
         var slug = config["Seed:TenantSlug"] ?? throw new InvalidOperationException("Seed:TenantSlug required");
         var password = config["Seed:AdminPassword"] ?? throw new InvalidOperationException("Seed:AdminPassword required");
-        if (password.Length < 14) throw new InvalidOperationException("Seed password must contain at least 14 characters");
+        if (password.Length < 8) throw new InvalidOperationException("Seed password must contain at least 8 characters");
         if (await db.Set<Tenant>().AnyAsync(t => t.Slug == slug)) return;
         var tenant = new Tenant { Slug = slug, Name = config["Seed:TenantName"] ?? slug };
         context.TenantId = tenant.Id;

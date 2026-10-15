@@ -1,5 +1,7 @@
 # Firebase service account key
 firebaseAuthKey.key
+**/firebase-service-account.json*
+**/*firebase-adminsdk*.json
 
 # Local ENV files
 .env.local
@@ -74,3 +76,6 @@ firebaseAuthKey.key
 /DispatchPro-Site-Bridge/app/route.mjs
 /DispatchPro-Office-Bridge-FINAL/app/lib/
 /DispatchPro-Office-Bridge-FINAL/app/route.mjs
+/artifacts/whatsapp-office/OfficeCalls-3.0/deployment-backup/
+/artifacts/home-runtime-update-20261010/private-backup/
+/artifacts/ptt-root-repair-20261010/private-backup/

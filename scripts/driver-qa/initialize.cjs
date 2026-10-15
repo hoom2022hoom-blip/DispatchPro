@@ -1,0 +1,11 @@
+const fs=require('node:fs'),path=require('node:path'),{spawnSync}=require('node:child_process');
+const config=JSON.parse(fs.readFileSync(process.argv[2],'utf8')),env=require('./environment.cjs')(config);
+if(!/^dispatchpro_driverqa_20261012_[a-f0-9]{8}$/.test(config.database)||!/^driverqa_[a-f0-9]{8}$/.test(config.role))throw Error('Unexpected QA identity');
+const result=spawnSync('dotnet',[config.apiDll||path.join(config.out,'api/DispatchPro.Api.dll'),'--contentRoot',path.join(config.root,'backend/DispatchPro.Api'),'--migrate','--seed','--qa-seed'],{windowsHide:true,env,cwd:config.root,encoding:'utf8',maxBuffer:4*1024*1024});
+fs.writeFileSync(path.join(config.out,'private/initialize.log'),(result.stdout||'')+(result.stderr||''));
+if(result.status!==0)throw Error('QA migration/fixture failed; inspect the private initialization log');
+const {sql}=require('../../artifacts/home-runtime-update-20261010/pg-tools.cjs');
+const metadata=JSON.parse(sql(`SELECT json_build_object('tenantId',(SELECT "Id" FROM "Tenant" WHERE "Slug"='driver-qa'),'driverId',(SELECT "Id" FROM "Driver" LIMIT 1),'customerId',(SELECT "Id" FROM "Customer" LIMIT 1),'peerUser',(SELECT "Username" FROM "User" WHERE "Username" LIKE 'customer-%'))`,config.database));
+Object.assign(config,metadata);fs.writeFileSync(process.argv[2],JSON.stringify(config,null,2));
+fs.writeFileSync(path.join(config.out,'private/test-accounts.private.json'),JSON.stringify({tenant:config.tenant,office:{username:config.officeUser,password:config.officePassword},driver:{username:config.driverUser,password:config.driverPassword},peer:{username:config.peerUser,password:config.peerPassword}},null,2));
+console.log('QA migrations and synthetic accounts prepared; no rides or calls created.');

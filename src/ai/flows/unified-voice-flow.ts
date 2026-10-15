@@ -1,5 +1,7 @@
 'use server';
 
+import { authorizeLegacyUser } from '@/lib/legacy-admin-authorization';
+
 /**
  * @fileOverview An AI flow for parsing various voice inputs, either logging a new call or executing a command.
  *
@@ -33,6 +35,7 @@ export type VoiceOutput = z.infer<typeof VoiceOutputSchema>;
 
 
 export async function processVoiceInput(input: VoiceInput): Promise<VoiceOutput> {
+  if (!await authorizeLegacyUser()) throw new Error("AI authorization required.");
   return unifiedVoiceFlow(input);
 }
 

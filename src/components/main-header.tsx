@@ -45,7 +45,7 @@ export function MainHeader() {
             <div className='flex items-center gap-2'>
                 <Truck className="h-6 w-6 text-primary" />
                 <h1 className="text-xl md:text-2xl font-bold tracking-tight text-foreground">
-                    DispatchPro
+                    تكسي نابلس والمهندس
                 </h1>
             </div>
         </header>
@@ -65,7 +65,7 @@ export function MainHeader() {
             <Link href="/" className="flex items-center gap-2 mr-4">
                 <Truck className="h-6 w-6 text-primary" />
                 <h1 className="hidden sm:block text-xl md:text-2xl font-bold tracking-tight text-foreground">
-                    DispatchPro
+                    تكسي نابلس والمهندس
                 </h1>
             </Link>
         </div>

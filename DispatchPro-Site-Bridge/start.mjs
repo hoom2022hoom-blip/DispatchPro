@@ -7,7 +7,7 @@ import {createOfficeBridge} from './scripts/lib/office-bridge.mjs';
 
 const root=dirname(fileURLToPath(import.meta.url));
 process.chdir(root);
-let receiver,lock,lockFile,logFile,stopping=false;
+let receiver,lock,lockFile,logFile,stopping=false,secure;
 const abort=new AbortController();
 function inside(path) {
   if(typeof path!=='string'||!path||isAbsolute(path)||path.includes(':')||relative(root,resolve(root,path)).startsWith('..'))throw Error('Paths must stay inside the portable package');
@@ -24,6 +24,7 @@ async function log(message) {
 async function stop() {
   if(stopping)return;stopping=true;abort.abort();
   if(receiver?.server.listening)await receiver.close();
+  await secure?.stop();
 }
 for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>{void stop();});
 
@@ -45,6 +46,17 @@ try {
     await unlink(lockFile);lock=await open(lockFile,'wx');
   }
   await lock.writeFile(String(process.pid));
+  if(config.secureReceiverConfigFile){
+    // Upgrade the existing Site Bridge in place. Secrets come from its Windows
+    // launcher over stdin; never from argv, config.json, or an external server.
+    const settings=JSON.parse((await readFile(inside(config.secureReceiverConfigFile),'utf8')).replace(/^\uFEFF/,''));
+    let input='';for await(const chunk of process.stdin){input+=chunk;if(input.length>8192)throw Error('Oversized receiver credentials');}
+    const {runLocalReceiver}=await import('./scripts/officecalls-agent/local-receiver.mjs');
+    secure=await runLocalReceiver({...settings,bridgeConfigFile:join(root,'site-config.json'),legacyTcpPort:config.whatsappTcpPort,legacyTcpHost:config.whatsappTcpHost},JSON.parse(input.replace(/^\uFEFF/,'')));
+    secure.server.once('close',()=>{stopping=true;abort.abort();});
+    while(!stopping&&secure.server.listening){try{await delay(1000,undefined,{signal:abort.signal});}catch{break;}}
+    await stop();
+  }else{
   receiver=createOfficeCallsTcpReceiver(config,{directory:source,host:config.whatsappTcpHost??'0.0.0.0',report:event=>{void log(event.type);}});
   // Bind first: calls are stored and ACKed even while the local API is restarting.
   await receiver.listen();
@@ -59,6 +71,7 @@ try {
     else{failures=0;if(!connected){await log('Local DispatchPro connected.');connected=true;}}
     if(result.imported||result.delivered)await log(JSON.stringify(result));
     try{await delay(failures?Math.min(15000,500*2**failures):500,undefined,{signal:abort.signal});}catch{break;}
+  }
   }
 }catch(error){
   await log(error.code==='EADDRINUSE'?'TCP 5050 is occupied. Stop the old OfficeCalls receiver; Site Bridge is the official receiver.':`Site Bridge error: ${error.code??error.message}`);

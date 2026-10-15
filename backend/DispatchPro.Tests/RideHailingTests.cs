@@ -47,6 +47,10 @@ public sealed class RideHailingTests
                         var driver = new Driver { UserId = user.Id, FullName = "Driver " + i, Phone = "0591234500", Status = DriverStatus.Available, Active = i != 4 };
                         if (i == 5) driver.Status = DriverStatus.Busy;
                         db.AddRange(user, driver); await db.SaveChangesAsync();
+                        // Dispatch eligibility requires an active vehicle in the stable baseline.
+                        var vehicleClass = await db.Set<VehicleClass>().FirstAsync();
+                        db.Add(new Vehicle { DriverId = driver.Id, VehicleClassId = vehicleClass.Id, Plate = slug + "-" + i });
+                        await db.SaveChangesAsync();
                         if (slug == "hailing-a") ids.Add(driver.Id);
                         // Stale, inactive, busy and cross-tenant drivers are all closer than eligible drivers.
                         var lon = slug == "hailing-b" || i >= 3 ? 35.25 : 35.251 + i * .001;
@@ -69,7 +73,7 @@ public sealed class RideHailingTests
             Assert.Equal(HttpStatusCode.BadRequest, (await first.PutAsJsonAsync("/api/v1/driver/location", new { latitude = 92, longitude = 35.25, accuracy = 8, capturedAt = DateTimeOffset.UtcNow })).StatusCode);
             Assert.Equal(HttpStatusCode.BadRequest, (await first.PutAsJsonAsync("/api/v1/driver/location", new { latitude = 32, longitude = 35, accuracy = 8, capturedAt = DateTimeOffset.UtcNow.AddHours(-1) })).StatusCode);
             using var customer = factory.CreateClient();
-            var account = await Read(await customer.PostAsJsonAsync("/api/v1/customer-app/register", new { tenant = "hailing-a", accountId = Guid.NewGuid(), deviceSecret = new string('c',64), fullName = "Hailing Customer", phone = "0591234567" }));
+            var account = await Read(await customer.VerifiedRegistration( new { tenant = "hailing-a", accountId = Guid.NewGuid(), deviceSecret = new string('c',64), fullName = "Hailing Customer", phone = "0591234567" }));
             customer.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", account["accessToken"]!.GetValue<string>());
             var id = Guid.NewGuid();
             var input = new { id, pickup = new { addressText = "Pickup", latitude = 32.22, longitude = 35.25, locationSource = "MAP_PIN" }, destination = "Destination", destinationLocation = new { addressText = "Destination", latitude = 32.23, longitude = 35.27, locationSource = "MAP_PIN" } };
@@ -98,7 +102,7 @@ public sealed class RideHailingTests
             await Read(await third.PutAsJsonAsync($"/api/v1/rides/{id}/status", new { status = "Accepted", version = ride["version"]!.GetValue<long>() }));
             var visible = await Read(await customer.GetAsync($"/api/v1/customer-app/rides/{id}"));
             Assert.Equal("ACCEPTED", visible["status"]!.GetValue<string>()); Assert.Equal("Driver 2", visible["driver"]!["fullName"]!.GetValue<string>()); Assert.Null(visible["driver"]!["phone"]);
-            Assert.NotNull(visible["tracking"]); Assert.True(visible["tracking"]!["etaMinutes"]!.GetValue<int>() > 0);
+            Assert.NotNull(visible["tracking"]); Assert.NotNull(visible["tracking"]!["updatedAt"]); Assert.Equal(10,visible["tracking"]!["accuracy"]!.GetValue<double>()); Assert.Null(visible["tracking"]!["etaMinutes"]);
             var reception = await Read(await office.GetAsync("/api/v1/reception/snapshot"));
             Assert.Equal("driver-accepted", Assert.Single(reception["rides"]!.AsArray())!["status"]!.GetValue<string>());
             var monitor = Assert.Single((await Read(await office.GetAsync("/api/v1/dispatch/rides"))).AsArray())!;

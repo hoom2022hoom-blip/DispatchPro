@@ -1,6 +1,8 @@
 
 'use server';
 
+import { authorizeLegacyUser } from '@/lib/legacy-admin-authorization';
+
 /**
  * @fileOverview An AI flow for processing chat messages between driver and dispatcher.
  *
@@ -26,6 +28,7 @@ const ChatMessageOutputSchema = z.object({
 export type ChatMessageOutput = z.infer<typeof ChatMessageOutputSchema>;
 
 export async function processChatMessage(input: ChatMessageInput): Promise<ChatMessageOutput> {
+  if (!await authorizeLegacyUser()) throw new Error("AI authorization required.");
   return chatFlow(input);
 }
 

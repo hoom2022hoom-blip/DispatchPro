@@ -19,8 +19,8 @@ type DriverRideCardProps = {
 
 export function DriverRideCard({ ride, onEdit, isQueued = false }: DriverRideCardProps) {
 
-    const createMapLink = (address: string) => {
-        return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+    const createMapLink = (address: string, coords?: {x:number;y:number}) => {
+        return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(coords && (coords.x!==0||coords.y!==0) ? `${coords.x},${coords.y}` : address)}`;
     }
 
     return (
@@ -31,12 +31,12 @@ export function DriverRideCard({ ride, onEdit, isQueued = false }: DriverRideCar
             <CardHeader>
                 <CardTitle className="text-lg flex items-start justify-between">
                     <div className='flex flex-col'>
-                        <a href={createMapLink(ride.pickup.name)} target="_blank" rel="noopener noreferrer" className="hover:underline text-primary">
+                        <a href={createMapLink(ride.pickup.name,ride.latitude!=null&&ride.longitude!=null?{x:ride.latitude,y:ride.longitude}:ride.pickup.coords)} target="_blank" rel="noopener noreferrer" className="hover:underline text-primary">
                             {ride.pickup.name}
                         </a>
                         {ride.dropoff && 
                             <CardDescription>
-                                to <a href={createMapLink(ride.dropoff.name)} target="_blank" rel="noopener noreferrer" className="hover:underline text-primary">
+                                to <a href={createMapLink(ride.dropoff.name,ride.dropoff.coords)} target="_blank" rel="noopener noreferrer" className="hover:underline text-primary">
                                     {ride.dropoff.name}
                                 </a>
                             </CardDescription>
@@ -52,7 +52,7 @@ export function DriverRideCard({ ride, onEdit, isQueued = false }: DriverRideCar
             <CardContent className="space-y-3">
                  <div className="grid grid-cols-2 gap-4 text-sm">
                      <div className="flex items-center gap-2 font-medium text-primary">
-                        <span>{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(ride.totalFare)}</span>
+                        <span>{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(ride.totalFare ?? 0)}</span>
                     </div>
                     <div className="flex items-center gap-2">
                         <Users className="text-muted-foreground" />

@@ -7,6 +7,8 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 const root = dirname(fileURLToPath(import.meta.url));
 process.chdir(root);
+const receiverPort = Number(process.env.DISPATCHPRO_ICALL_HTTP_PORT || 9007);
+if (!Number.isInteger(receiverPort) || receiverPort < 1024 || receiverPort > 65535) throw Error('Invalid receiver port');
 const logFile = join(root, 'logs', 'bridge.log');
 let receiver, gateway, lock, stopping = false, ready = false;
 const lockFile = join(root, 'data', 'bridge-start.lock');
@@ -69,12 +71,12 @@ try {
   await log('External API, authentication, tenant and CallerId verified');
   await new Promise((resolveFree, reject) => {
     const probe = createServer();
-    probe.once('error', () => reject(Error('Port 9005 is occupied; close the previous Call Integration receiver before starting this package')));
-    probe.listen(9005, '127.0.0.1', () => probe.close(resolveFree));
+    probe.once('error', () => reject(Error(`Receiver HTTP port ${receiverPort} is occupied; existing Office services were left running`)));
+    probe.listen(receiverPort, '127.0.0.1', () => probe.close(resolveFree));
   });
   const launcherLog = join(root, 'data', 'launcher.log');
   const offset = (await stat(launcherLog).catch(() => ({ size: 0 }))).size;
-  const env = { ...process.env };
+  const env = { ...process.env, DISPATCHPRO_ICALL_HTTP_PORT: String(receiverPort) };
   for (const key of ['NODE_OPTIONS', 'DISPATCHPRO_LOCAL_DATA_DIR', 'DISPATCHPRO_CALL_TOKEN', 'DISPATCHPRO_LAUNCHER_PID']) delete env[key];
   receiver = spawn(join(root, 'DispatchPro-Icall-Test.exe'), [], { cwd: root, env, windowsHide: true, stdio: 'ignore' });
   let receiverError;
@@ -94,15 +96,11 @@ try {
   if (!capture) throw Error('iCall capture did not become ready; see data/launcher.log for Npcap or UDP error');
   const token = (await readFile(join(root, 'data', 'call-token'), 'utf8').catch(() => '')).trim();
   // The receiver creates its secret on the first GET when this is a new package.
-  if (!token) await request('http://127.0.0.1:9005/api/calls');
+  if (!token) await request(`http://127.0.0.1:${receiverPort}/api/calls`);
   const localToken = (await readFile(join(root, 'data', 'call-token'), 'utf8')).trim();
-  const local = await request('http://127.0.0.1:9005/api/calls', { headers: { Authorization: `Bearer ${localToken}` } });
+  const local = await request(`http://127.0.0.1:${receiverPort}/api/calls`, { headers: { Authorization: `Bearer ${localToken}` } });
   if (!local.ok) throw Error(`Package receiver authentication failed (HTTP ${local.status})`);
-  gateway = spawn(process.execPath, [join(root, 'scripts/call-lan-server.mjs')], {cwd:root,env,windowsHide:true,stdio:['ignore','pipe','pipe']});
-  gateway.stdout.on('data', value => { void log('WhatsApp gateway: '+value.toString().trim()); });
-  gateway.stderr.on('data', value => { void log('WhatsApp gateway ERROR: '+value.toString().trim()); });
-  gateway.on('error', error => { void log('WhatsApp gateway start failed: '+error.code); });
-  gateway.on('exit', code => { if(!stopping) void log('WhatsApp gateway stopped: '+code); });
+  // WhatsApp already has its own Site Bridge; this launcher starts iCall only.
   await mkdir(inside(config.sourceDirectory), { recursive: true });
   const { createOfficeBridge } = await import('./scripts/lib/office-bridge.mjs');
   const bridge = createOfficeBridge(config, credentials, { report: event => { void log(`Bridge: ${event.type}`); } });

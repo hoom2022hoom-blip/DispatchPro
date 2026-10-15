@@ -1,6 +1,7 @@
 "use client";
 
 import React from 'react';
+import {latestTraccarPositions} from '@/lib/traccar-map';
 import { TraccarMapView } from '@/components/TraccarMapView';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useTraccar } from '@/context/traccar-context';
@@ -12,19 +13,19 @@ export default function FleetPage() {
   
   const onlineDevices = getOnlineDevices();
   const totalDevices = devices.length;
-  const activePositions = positions.filter(p => p.valid).length;
+  const activePositions = React.useMemo(()=>latestTraccarPositions(positions).size,[positions]);
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Fleet Management</h1>
+    <div dir="rtl" className="h-full overflow-y-auto overscroll-contain px-3 py-4 space-y-4 sm:px-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-xl font-bold sm:text-2xl">خريطة الأسطول</h1>
         <Badge variant={authenticated ? "default" : "destructive"}>
-          {authenticated ? "Connected to Traccar" : "Disconnected"}
+          {authenticated ? "متصل بـ Traccar" : "غير متصل"}
         </Badge>
       </div>
 
-      {/* Fleet Statistics */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <details className="rounded-xl border p-3"><summary className="min-h-11 cursor-pointer font-bold">إحصاءات الأسطول</summary>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Vehicles</CardTitle>
@@ -80,6 +81,7 @@ export default function FleetPage() {
         </Card>
       </div>
 
+      </details>
       {/* Traccar Map */}
       <TraccarMapView 
         className="w-full"

@@ -1,0 +1,15 @@
+const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),{spawnSync}=require('node:child_process');
+const {sql,ident,literal,pgEnv,bin}=require('../../artifacts/home-runtime-update-20261010/pg-tools.cjs');
+const root=path.resolve(__dirname,'../..'),out=path.resolve(process.argv[2]);
+fs.mkdirSync(path.join(out,'private'),{recursive:true});
+const file=path.join(out,'private/config.private.json');
+if(fs.existsSync(file))throw Error('QA configuration already exists; reuse only after verifying its identity.');
+const suffix=crypto.randomBytes(4).toString('hex'),database='dispatchpro_driverqa_20261012_'+suffix,role='driverqa_'+suffix;
+const secret=()=>crypto.randomBytes(24).toString('hex');
+const config={root,out,database,role,dbPassword:secret(),signingKey:secret(),officePassword:secret(),driverPassword:secret(),peerPassword:secret(),apiPort:9027,webPort:9025,gatewayPort:9028,tenant:'driver-qa',officeUser:'qa.office',driverUser:'qa.driver'};
+sql(`CREATE ROLE ${ident(role)} LOGIN PASSWORD ${literal(config.dbPassword)} NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION`, 'postgres');
+sql(`CREATE DATABASE ${ident(database)} OWNER ${ident(role)}`, 'postgres');
+sql('CREATE EXTENSION IF NOT EXISTS postgis',database);
+config.connection=`Host=${pgEnv.PGHOST};Port=${pgEnv.PGPORT};Database=${database};Username=${role};Password=${config.dbPassword}`;
+fs.writeFileSync(file,JSON.stringify(config,null,2));
+console.log(JSON.stringify({database,role,newDatabase:true,productionDataCopied:false,configSaved:true}));

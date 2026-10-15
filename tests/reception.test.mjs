@@ -30,7 +30,7 @@ test('compact reception edits preserve identity, numbering, phone, source and fa
   for (const key of ['id', 'orderNumber', 'orderDay', 'passengerPhone', 'source', 'callEventId', 'totalFare', 'createdAt']) assert.equal(edited[key], original[key]);
   assert.deepEqual(edited.pickup.coords, original.pickup.coords);
   assert.equal(original.passengerName, 'أرضي');
-  assert.throws(() => applyReceptionEdit(original, { ...values, address: ' ' }), /عنوان/);
+  assert.equal(applyReceptionEdit(original, { ...values, address: ' ' }).pickup.name, '');
   assert.throws(() => applyReceptionEdit(original, { ...values, status: 'assigned' }), /السائق/);
   const assigned = { ...original, status: 'assigned', driverId: 'driver', shiftId: 'shift', assignedAt: new Date() };
   const cancelled = applyReceptionEdit(assigned, { ...values, status: 'cancelled' });

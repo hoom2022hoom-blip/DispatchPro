@@ -91,7 +91,7 @@ export async function createIcallProcessor({ directory, send, sourceIp = '192.16
 }
 
 export function listenIcall(processor, { port = 3520, host = '0.0.0.0', onError = console.error } = {}) {
-  const socket = createSocket('udp4');
+  const socket = createSocket({ type: 'udp4', reuseAddr: true });
   socket.on('message', (packet, remote) => { void processor.receive(packet, remote.address).catch(onError); });
   socket.on('error', onError);
   socket.bind(port, host);

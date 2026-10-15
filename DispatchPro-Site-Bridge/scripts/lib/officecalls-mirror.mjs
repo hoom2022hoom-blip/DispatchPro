@@ -2,6 +2,7 @@ import {createSocket} from 'node:dgram';
 import {createHash} from 'node:crypto';
 import {mkdir,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
+import {gridPhone} from '../../../scripts/officecalls-agent/phone.mjs';
 
 export function officePacketKey(payload, now=new Date()) {
   return createHash('sha256').update(`${now.getFullYear()}-${now.getMonth()+1}-${now.getDate()}\n`).update(payload).digest('hex');
@@ -11,8 +12,8 @@ export function officePacketKey(payload, now=new Date()) {
 // Line 04 is WhatsApp. The destination is the old receiver's existing destination.
 export function officeMirrorPayload(phone, now=new Date()) {
   const header=Buffer.from([0x5e,0x5e,0x3c,0x55,0x3e,0,0,0,0,0,1,0x3c,0x53,0x3e,0x17,0,0x16,7,0x18,0x60,0x24]);
-  const digits=phone.replace(/[^0-9]/g,'').slice(0,15);
-  const dashed=(digits.length===10?`${digits.slice(0,3)}-${digits.slice(3,6)}-${digits.slice(6)}`:digits.length===9?`${digits.slice(0,3)}-${digits.slice(3,6)}-${digits.slice(6)}`:digits).slice(0,15);
+  const digits=gridPhone(phone);
+  const dashed=digits.length===10?`${digits.slice(0,3)}-${digits.slice(3,6)}-${digits.slice(6)}`:digits.length===9?`${digits.slice(0,3)}-${digits.slice(3,6)}-${digits.slice(6)}`:digits;
   const pad=value=>String(value).padStart(2,'0');
   const stamp=`${pad(now.getMonth()+1)}/${pad(now.getDate())} ${pad(now.getHours()%12||12)}:${pad(now.getMinutes())} ${now.getHours()<12?'AM':'PM'}`;
   const record=Buffer.from(`04 I S 0000 G B1 ${stamp} ${dashed.padEnd(15)}${digits.padEnd(15)}`,'ascii');

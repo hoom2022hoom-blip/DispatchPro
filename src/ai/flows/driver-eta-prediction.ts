@@ -1,5 +1,7 @@
 'use server';
 
+import { authorizeLegacyUser } from '@/lib/legacy-admin-authorization';
+
 /**
  * @fileOverview A driver ETA prediction AI agent.
  *
@@ -38,6 +40,7 @@ export type DriverEtaPredictionOutput = z.infer<
 export async function predictDriverEta(
   input: DriverEtaPredictionInput
 ): Promise<DriverEtaPredictionOutput> {
+  if (!await authorizeLegacyUser()) throw new Error("AI authorization required.");
   return predictDriverEtaFlow(input);
 }
 

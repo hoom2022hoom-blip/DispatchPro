@@ -3,6 +3,19 @@ namespace DispatchPro.Api.Services;
 public sealed record LocationInput(string AddressText, string? Neighborhood = null, string? Street = null, double? Latitude = null, double? Longitude = null, string LocationSource = "MANUAL_TEXT", string? Notes = null);
 public static class Locations
 {
+    public static string RequiredDestination(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) throw new ArgumentException("يرجى تحديد وجهة الرحلة");
+        if (text.Length > 500) throw new ArgumentException("وجهة الرحلة أطول من الحد المسموح");
+        return text.Trim();
+    }
+    // Office orders can start with an unknown destination. Never invent a label
+    // or map point; customer booking and street hailing keep their own rules.
+    public static string OfficeDestination(string? text)
+    {
+        if (text?.Length > 500) throw new ArgumentException("وجهة الرحلة أطول من الحد المسموح");
+        return text?.Trim() ?? "";
+    }
     public static readonly string[] Sources = ["CUSTOMER_GPS", "WHATSAPP_LOCATION", "MAP_PIN", "ADDRESS_SEARCH", "MANUAL_TEXT", "SAVED_ADDRESS"];
     public static void Validate(LocationInput input, bool allowEmpty = false)
     {

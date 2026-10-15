@@ -18,7 +18,18 @@ public sealed class TaxiDb(DbContextOptions<TaxiDb> options, TenantContext tenan
     protected override void OnModelCreating(ModelBuilder model)
     {
         model.HasPostgresExtension("postgis");
+        model.Entity<OfficeCallDevice>().HasIndex(x => x.TokenHash).IsUnique();
+        model.Entity<OfficeCallEvent>().HasIndex(x => new { x.TenantId, x.EventId }).IsUnique();
+        model.Entity<OfficeCallEvent>().HasIndex(x => new { x.DispatchStatus, x.NextAttempt });
+        Link<OfficeCallEvent, OfficeCallDevice>(model, nameof(OfficeCallEvent.DeviceId));
+        Link<OfficeCallPairing, OfficeCallDevice>(model, nameof(OfficeCallPairing.DeviceId));
+        model.Entity<SuggestedPlace>().Property(p => p.Version).IsConcurrencyToken();
+        model.Entity<SuggestedPlace>().HasIndex(p => new { p.TenantId, p.IsActive, p.SortOrder });
         model.Entity<Driver>().Property(d => d.Active).HasDefaultValue(true);
+        model.Entity<Driver>().Property(d => d.VoiceEnabled).HasDefaultValue(true);
+        model.Entity<Driver>().Property(d => d.CanListen).HasDefaultValue(true);
+        model.Entity<Driver>().Property(d => d.CanTalkPublic).HasDefaultValue(true);
+        model.Entity<Driver>().Property(d => d.CanTalkPrivate).HasDefaultValue(true);
         model.Entity<Vehicle>().Property(v => v.Active).HasDefaultValue(true);
         model.Entity<Tenant>().HasIndex(x => x.Slug).IsUnique();
         foreach (var type in typeof(TenantEntity).Assembly.GetTypes().Where(t => !t.IsAbstract && typeof(TenantEntity).IsAssignableFrom(t)))
@@ -54,7 +65,22 @@ public sealed class TaxiDb(DbContextOptions<TaxiDb> options, TenantContext tenan
         model.Entity<SavedAddress>().Property(x => x.Version).IsConcurrencyToken();
         Link<Ride, RideRequest>(model, nameof(Ride.RideRequestId));
         Link<Ride, Driver>(model, nameof(Ride.DriverId));
+        Link<DriverJob, Driver>(model, nameof(DriverJob.DriverId));
+        Link<DriverJob, Ride>(model, nameof(DriverJob.RideId));
+        model.Entity<DriverJob>().HasIndex(j => new { j.TenantId, j.RideId }).IsUnique();
+        model.Entity<DriverJob>().HasIndex(j => new { j.TenantId, j.DriverId, j.Position });
+        model.Entity<DriverJob>().Property(j => j.Version).IsConcurrencyToken();
+        model.Entity<Driver>().Property(d => d.DriverAppEnabled).HasDefaultValue(true);
+        model.Entity<Driver>().Property(d => d.GpsEnabled).HasDefaultValue(true);
+        model.Entity<DriverLocation>().Property(l => l.Source).HasDefaultValue("driver");
+        model.Entity<DriverGpsPoint>().Property(p => p.Source).HasDefaultValue("driver");
+        model.Entity<DriverGpsPoint>().Property(p => p.LocationAccepted).HasDefaultValue(true);
         Link<DriverLocation, Driver>(model, nameof(DriverLocation.DriverId));
+        Link<DriverGpsPoint, Driver>(model, nameof(DriverGpsPoint.DriverId));
+        Link<DriverGpsPoint, Ride>(model, nameof(DriverGpsPoint.RideId));
+        model.Entity<DriverGpsPoint>().HasIndex(p => new { p.TenantId, p.DriverId, p.Timestamp });
+        model.Entity<DriverGpsPoint>().HasIndex(p => new { p.TenantId, p.RideId, p.Timestamp });
+        model.Entity<AuditLog>().HasIndex(p => new { p.TenantId, p.EntityId, p.CreatedAt });
         Link<RideOffer, Driver>(model, nameof(RideOffer.DriverId));
         Link<RideOffer, Ride>(model, nameof(RideOffer.RideId));
         model.Entity<DispatchPolicy>().HasIndex(x => x.TenantId).IsUnique();
@@ -137,7 +163,7 @@ public sealed class TaxiDb(DbContextOptions<TaxiDb> options, TenantContext tenan
         var result = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
         if (result > 0)
         {
-            if (Database.CurrentTransaction is null) notifications?.Publish();
+            if (Database.CurrentTransaction is null) notifications?.Publish(CurrentTenant);
             else PendingNotification = true;
         }
         return result;

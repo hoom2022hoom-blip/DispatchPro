@@ -1,0 +1,13 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" tools:node="remove" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" tools:node="remove" />
+  <application android:name="com.dispatchpro.driver.CustomerApplication">
+    <service android:name="com.dispatchpro.driver.CustomerArrivalReminderJob" android:exported="false" android:permission="android.permission.BIND_JOB_SERVICE" />
+    <service android:name="com.dispatchpro.driver.CustomerPushRegistrationJob" android:exported="false" android:permission="android.permission.BIND_JOB_SERVICE" />
+    <service android:name="com.dispatchpro.driver.CustomerMessagingService" android:exported="false">
+      <intent-filter><action android:name="com.google.firebase.MESSAGING_EVENT" /></intent-filter>
+    </service>
+    <service android:name="com.dispatchpro.driver.DriverForegroundService" tools:node="remove" />
+    <meta-data android:name="firebase_analytics_collection_enabled" android:value="false" />
+  </application>
+</manifest>

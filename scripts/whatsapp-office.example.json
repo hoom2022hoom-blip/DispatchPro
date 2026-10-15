@@ -1,0 +1,10 @@
+{
+  "apiUrl": "https://api.nablustaxi.com",
+  "tenant": "YOUR-OFFICE-SLUG",
+  "tenantId": "00000000-0000-0000-0000-000000000000",
+  "siteId": "office-whatsapp",
+  "bindAddress": "0.0.0.0",
+  "whatsappTcpPort": 5050,
+  "stateDirectory": "data",
+  "credentialsFile": "credentials.json"
+}

@@ -1,0 +1,9 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+  <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+  <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>
+  <application android:name="com.dispatchpro.driver.DriverApplication" android:networkSecurityConfig="${qaNetworkSecurityConfig}">
+    <provider android:name="com.google.firebase.provider.FirebaseInitProvider" tools:node="remove"/>
+    <service android:name="com.dispatchpro.driver.DriverOfferSyncJob" android:exported="false" android:permission="android.permission.BIND_JOB_SERVICE"/>
+    <receiver android:name="com.dispatchpro.driver.DriverBootReceiver" android:exported="false"><intent-filter><action android:name="android.intent.action.BOOT_COMPLETED"/></intent-filter></receiver>
+  </application>
+</manifest>

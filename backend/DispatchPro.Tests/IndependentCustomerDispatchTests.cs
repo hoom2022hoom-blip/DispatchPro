@@ -83,19 +83,23 @@ public sealed class IndependentCustomerDispatchTests
                 await Read(await client.PutAsJsonAsync("/api/v1/driver/location", new { latitude = 32.22, longitude = 35.251 + i * .001, accuracy = 8, capturedAt = DateTimeOffset.UtcNow }));
             }
             using var customer = factory.CreateClient();
-            var registered = await Read(await customer.PostAsJsonAsync("/api/v1/customer-app/register", new
+            var registered = await Read(await customer.VerifiedRegistration( new
             { tenant = "independent-customer", accountId = Guid.NewGuid(), deviceSecret = new string('d', 64), fullName = "Independent test customer", phone = "0591234567" }));
             customer.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", registered["accessToken"]!.GetValue<string>());
             var id = Guid.NewGuid();
             var input = new { id, pickup = new { addressText = "GPS pickup", latitude = 32.22, longitude = 35.25, locationSource = "CUSTOMER_GPS" },
                 destination = "Map destination", destinationLocation = new { addressText = "Map destination", latitude = 32.23, longitude = 35.27, locationSource = "MAP_PIN" } };
             // No office login has occurred, and no office token is sent for creation.
+            var creationLatency=System.Diagnostics.Stopwatch.StartNew();
             var created = await Read(await customer.PostAsJsonAsync("/api/v1/customer-app/rides", input));
+            LocalLatency.Record("customer_create_confirmed_local_api_ms",creationLatency.Elapsed.TotalMilliseconds);
             Assert.Equal("SEARCHING_DRIVER", created["rideStatus"]!.GetValue<string>());
             await Read(await customer.PostAsJsonAsync("/api/v1/customer-app/rides", input));
             async Task<JsonArray> Offers(HttpClient driver) => (await Read(await driver.GetAsync("/api/v1/driver/updates")))["data"]!["rides"]!.AsArray();
             async Task<JsonNode> CustomerRide() => await Read(await customer.GetAsync($"/api/v1/customer-app/rides/{id}"));
+            var offerLatency=System.Diagnostics.Stopwatch.StartNew();
             var first = Assert.Single(await Offers(drivers[0]))!;
+            LocalLatency.Record("driver_read_assigned_offer_local_api_ms",offerLatency.Elapsed.TotalMilliseconds);
             Assert.Empty(await Offers(drivers[1])); Assert.Empty(await Offers(drivers[2]));
             Assert.Equal(32.22, first["latitude"]!.GetValue<double>());
             Assert.Equal(35.27, first["destinationLongitude"]!.GetValue<double>());
@@ -114,7 +118,7 @@ public sealed class IndependentCustomerDispatchTests
                 Assert.Equal(ids[0], ride.DriverId);
                 Assert.Equal(RideStatus.Assigned, ride.Status);
             }
-            Assert.Null((await CustomerRide())["driver"]);
+            Assert.Null((await CustomerRide())["driver"]); // Offers are not accepted assignments.
             Assert.Equal(32.22, (await CustomerRide())["pickupLocation"]!["latitude"]!.GetValue<double>());
             Assert.Equal(35.27, (await CustomerRide())["destinationLocation"]!["longitude"]!.GetValue<double>());
             await Read(await drivers[0].PutAsJsonAsync($"/api/v1/driver/rides/{id}/reject", new { version = first["version"]!.GetValue<long>() }));
@@ -157,8 +161,10 @@ public sealed class IndependentCustomerDispatchTests
             foreach (var (status, expected) in new[] { ("DriverArriving", "DRIVER_ARRIVING"), ("Arrived", "DRIVER_ARRIVED"), ("InProgress", "IN_PROGRESS"), ("Completed", "COMPLETED") })
             {
                 var current = await Read(await drivers[2].GetAsync($"/api/v1/driver/rides/{id}"));
-                await Read(await drivers[2].PutAsJsonAsync($"/api/v1/rides/{id}/status", new { status, version = current["version"]!.GetValue<long>() }));
+                var arrivalLatency=System.Diagnostics.Stopwatch.StartNew();
+                await Read(await drivers[2].PutAsJsonAsync($"/api/v1/rides/{id}/status", new { status, version = current["version"]!.GetValue<long>(), collectedFare = status=="Completed"?(decimal?)30:null }));
                 Assert.Equal(expected, (await CustomerRide())["rideStatus"]!.GetValue<string>());
+                if(status=="Arrived")LocalLatency.Record("arrived_commit_and_customer_read_local_api_ms",arrivalLatency.Elapsed.TotalMilliseconds);
                 Assert.Equal(expected, (await OfficeRide())["rideStatus"]!.GetValue<string>());
             }
             using (var scope = factory.Services.CreateScope())

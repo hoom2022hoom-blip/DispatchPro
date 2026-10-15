@@ -38,22 +38,23 @@ public sealed class CustomerPlacesTests
             Guid legacyId = Guid.NewGuid();
             using (var scope = factory.Services.CreateScope()) {
                 var db = scope.ServiceProvider.GetRequiredService<TaxiDb>();
-                await db.Database.MigrateAsync();
+                await db.GetService<IMigrator>().MigrateAsync("20260926230216_ReceptionWriteReplay");
                 var tenant = scope.ServiceProvider.GetRequiredService<TenantContext>();
-                foreach (var slug in new[] { "places-a", "places-b" }) await Seed.RunAsync(db, tenant, new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?> { ["Seed:TenantSlug"] = slug, ["Seed:AdminPassword"] = "Places-test-password!" }).Build());
+                foreach(var slug in new[]{"places-a","places-b"})db.Add(new Tenant{Slug=slug,Name=slug});await db.SaveChangesAsync();
                 // Seed with the current model, then exercise an actual upgrade from the legacy schema.
-                await db.GetService<IMigrator>().MigrateAsync("20260926230216_ReceptionWriteReplay"); db.ChangeTracker.Clear();
+                db.ChangeTracker.Clear();
                 tenant.TenantId = (await db.Set<Tenant>().SingleAsync(t => t.Slug == "places-a")).Id;
                 var payload = "{\"id\":\"legacy-order\",\"pickup\":{\"name\":\"old address\",\"coords\":{\"x\":0,\"y\":0}},\"source\":\"LANDLINE_ICALL\",\"passengerPhone\":\"0000\",\"totalFare\":0,\"status\":\"pending\",\"movingFee\":false,\"createdAt\":\"2026-09-27T12:00:00Z\",\"updatedAt\":\"2026-09-27T12:00:00Z\",\"orderDay\":\"2026-09-27\",\"orderNumber\":7,\"receptionVersion\":1}";
                 await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO \"ReceptionOrder\" (\"Id\",\"TenantId\",\"ExternalId\",\"Day\",\"Number\",\"Payload\",\"Version\",\"LastWriteHash\") VALUES ({legacyId},{tenant.TenantId},{"legacy-order"},{"2026-09-27"},{7},CAST({payload} AS jsonb),{1},{""})");
                 var oldCustomerId = Guid.NewGuid();
-                // This database is deliberately downgraded to a schema without Customer.CreatedAt.
+                // This new test database starts at a legacy schema without Customer.CreatedAt.
                 // Insert the legacy row directly instead of using the current EF model.
                 await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO \"Customer\" (\"Id\",\"TenantId\",\"FullName\",\"Phone\") VALUES ({oldCustomerId},{tenant.TenantId},{"Existing customer"},{"+970591111111"})");
                 var oldRequestId = Guid.NewGuid(); var oldRideId = Guid.NewGuid();
                 await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO \"RideRequest\" (\"Id\",\"TenantId\",\"CustomerId\",\"Pickup\",\"Destination\",\"Notes\",\"Source\",\"CreatedAt\") VALUES ({oldRequestId},{tenant.TenantId},{oldCustomerId},{"Existing API address"},{""},{"preserved"},{"MANUAL"},{DateTimeOffset.UtcNow})");
                 await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO \"Ride\" (\"Id\",\"TenantId\",\"RideRequestId\",\"Status\",\"Version\") VALUES ({oldRideId},{tenant.TenantId},{oldRequestId},{0},{1})");
                 await db.Database.MigrateAsync();
+                foreach(var slug in new[]{"places-a","places-b"}){tenant.TenantId=(await db.Set<Tenant>().SingleAsync(t=>t.Slug==slug)).Id;var role=new Role{Name="Administrator"};var user=new User{Username="admin",RoleId=role.Id};user.PasswordHash=new Microsoft.AspNetCore.Identity.PasswordHasher<User>().HashPassword(user,"Places-test-password!");db.AddRange(role,user,new Office{Name=slug},new FeatureFlag{Key="WhatsApp",Enabled=false},new VehicleClass{Name="Economy"});foreach(var code in Permissions.All)db.Add(new Permission{RoleId=role.Id,Code=code});await db.SaveChangesAsync();}tenant.TenantId=(await db.Set<Tenant>().SingleAsync(t=>t.Slug=="places-a")).Id;
                 var migrated = await db.Set<RideRequest>().SingleAsync(r => r.Id == legacyId); Assert.Equal("LANDLINE", migrated.Source); Assert.Equal("old address", migrated.AddressText); Assert.Null(migrated.CustomerId);
                 var upgraded = await db.Set<ReceptionOrder>().SingleAsync(o => o.Id == legacyId); Assert.Equal(7, upgraded.Number); Assert.Equal(legacyId, upgraded.RideRequestId);
                 Assert.True(await db.Set<ReceptionOrder>().AnyAsync(o => o.RideRequestId == oldRequestId && o.ExternalId == oldRideId.ToString()));
@@ -81,17 +82,17 @@ public sealed class CustomerPlacesTests
             var workId = work["id"]!.GetValue<string>(); work["latitude"] = 32.23; work["longitude"] = 35.26;
             var moved = await Body(await a.PutAsJsonAsync($"/api/v1/saved-addresses/{workId}", work)); Assert.Equal(32.23, moved["latitude"]!.GetValue<double>());
             Assert.Equal(HttpStatusCode.Conflict, (await a.PutAsJsonAsync($"/api/v1/saved-addresses/{workId}", work)).StatusCode);
-            var ride = await Body(await a.PostAsJsonAsync("/api/v1/ride-requests", new { customerId, savedAddressId = workId, source = "CUSTOMER_APP" }));
+            var ride = await Body(await a.PostAsJsonAsync("/api/v1/ride-requests", new { customerId, savedAddressId = workId, source = "CUSTOMER_APP",destination="وجهة اختبار محددة" }));
             var requestId = ride["rideRequestId"]!.GetValue<string>();
             var rides = await Body(await a.GetAsync("/api/v1/reception/snapshot"));
             var reception = rides["rides"]!.AsArray().Single(r => r!["rideRequestId"]!.GetValue<string>() == requestId)!;
             Assert.Equal(32.23, reception["latitude"]!.GetValue<double>()); Assert.Equal("SAVED_ADDRESS", reception["locationSource"]!.GetValue<string>());
-            Assert.Equal(HttpStatusCode.NotFound, (await b.PostAsJsonAsync("/api/v1/ride-requests", new { savedAddressId = workId, source = "MANUAL" })).StatusCode);
-            var manual = await Body(await a.PostAsJsonAsync("/api/v1/ride-requests", new { source = "MANUAL", location = new { addressText = "عنوان حر", neighborhood = "حي", street = "شارع", locationSource = "MANUAL_TEXT" } }));
+            Assert.Equal(HttpStatusCode.NotFound, (await b.PostAsJsonAsync("/api/v1/ride-requests", new { savedAddressId = workId, source = "MANUAL", destination = "وجهة اختبار محددة" })).StatusCode);
+            var manual = await Body(await a.PostAsJsonAsync("/api/v1/ride-requests", new { source = "MANUAL", destination = "وجهة اختبار محددة", location = new { addressText = "عنوان حر", neighborhood = "حي", street = "شارع", locationSource = "MANUAL_TEXT" } }));
             var manualRequestId = manual["rideRequestId"]!.GetValue<string>();
             var detail = await Body(await a.GetAsync("/api/v1/rides/" + manual["id"]!.GetValue<string>())); Assert.Null(detail["request"]!["latitude"]); Assert.Equal("عنوان حر", detail["request"]!["addressText"]!.GetValue<string>());
             await a.PutAsync("/api/v1/features/WhatsApp?enabled=true", null);
-            var call = new ReceptionEvent("location-call", "WHATSAPP", "0591234500", "2026-09-27T12:00:00Z", Location: new("موقع واتساب", Latitude: 32.2, Longitude: 35.2, LocationSource: "WHATSAPP_LOCATION"));
+            var call = new ReceptionEvent("location-call", "WHATSAPP", "0591234500", DateTimeOffset.UtcNow.ToString("O"), Location: new("موقع واتساب", Latitude: 32.2, Longitude: 35.2, LocationSource: "WHATSAPP_LOCATION"));
             await Body(await a.PostAsJsonAsync("/api/v1/reception/calls", call)); await Body(await a.PostAsJsonAsync("/api/v1/reception/calls", call));
             rides = await Body(await a.GetAsync("/api/v1/reception/snapshot")); var callRow = rides["rides"]!.AsArray().Single(r => r!["callEventId"]?.GetValue<string>() == "location-call")!;
             Assert.Equal("WHATSAPP_LOCATION", callRow["locationSource"]!.GetValue<string>()); Assert.Equal(32.2, callRow["latitude"]!.GetValue<double>());
@@ -99,7 +100,11 @@ public sealed class CustomerPlacesTests
             detail = await Body(await a.GetAsync("/api/v1/rides/" + ride["id"]!.GetValue<string>())); Assert.Null(detail["request"]!["savedAddressId"]); Assert.Equal(32.23, detail["request"]!["latitude"]!.GetValue<double>());
             Assert.Equal(HttpStatusCode.NotFound, (await a.GetAsync($"/api/v1/saved-addresses/{workId}")).StatusCode);
             using var verifyScope = factory.Services.CreateScope(); var verifyDb = verifyScope.ServiceProvider.GetRequiredService<TaxiDb>(); var context = verifyScope.ServiceProvider.GetRequiredService<TenantContext>(); context.TenantId = (await verifyDb.Set<Tenant>().SingleAsync(t => t.Slug == "places-a")).Id;
-            Assert.Equal(await verifyDb.Set<RideRequest>().CountAsync(), await verifyDb.Set<ReceptionOrder>().CountAsync());
+            // A received call stays a draft until the office supplies its required destination.
+            Assert.Equal(await verifyDb.Set<RideRequest>().CountAsync(), await verifyDb.Set<ReceptionOrder>().CountAsync(o => o.RideRequestId != null));
+            var drafts = await verifyDb.Set<ReceptionOrder>().Where(o => o.RideRequestId == null).ToListAsync();
+            Assert.Single(drafts);
+            Assert.Equal("location-call", JsonNode.Parse(drafts[0].Payload)!["callEventId"]!.GetValue<string>());
             Assert.Equal(await verifyDb.Set<RideRequest>().CountAsync(), await verifyDb.Set<Ride>().CountAsync());
         } finally { NpgsqlConnection.ClearAllPools(); await using var drop = new NpgsqlCommand($"DROP DATABASE {database} WITH (FORCE)", admin); await drop.ExecuteNonQueryAsync(); }
     }

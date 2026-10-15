@@ -40,7 +40,7 @@ public sealed class DriverOperations(TaxiDb db, TenantContext tenant, ReceptionS
         var entry = all.SingleOrDefault(q => q.DriverId == driver.Id);
         var target = all.ToList();
         if (input.Type is "add" or "transfer") {
-            if (input.Type == "add" && (!driver.Active || driver.Status is DriverStatus.Busy or DriverStatus.Suspended || await reception.IsBusy(driver.Id))) throw new ReceptionConflictException("السائق غير متاح للدور");
+            if (input.Type == "add" && (!driver.Active || !driver.DriverAppEnabled || driver.Status is DriverStatus.Busy or DriverStatus.Suspended || await reception.IsBusy(driver.Id))) throw new ReceptionConflictException("السائق غير متاح للدور");
             if (input.Type == "transfer" && entry is null) throw new ArgumentException("السائق غير موجود في الدور");
             if (entry is not null && entry.QueueLocationId == input.QueueLocationId) { await tx.CommitAsync(); return; }
             if (entry is not null && (!input.ConfirmTransfer || input.FromLocationId != entry.QueueLocationId)) throw new ReceptionConflictException("السائق موجود في موقع آخر. أكد نقله إلى الموقع المختار");

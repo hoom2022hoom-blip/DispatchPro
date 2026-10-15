@@ -10,10 +10,8 @@ export type ReceptionCustomer = {
   defaultAddress?: string | Location;
 };
 
-export function normalizePhone(phone: string) {
-  const digits = phone.replace(/\D/g, '').replace(/^00/, '');
-  return /^(970|972)\d{8,9}$/.test(digits) ? `0${digits.slice(3)}` : digits;
-}
+export {normalizePhone} from './phone-normalization.js';
+import {normalizePhone} from './phone-normalization.js';
 
 export function findCallCustomer(customers: ReceptionCustomer[], phone: string) {
   const normalized = normalizePhone(phone);
@@ -35,7 +33,7 @@ export async function callReceptionRide(input: CallEvent, customer?: ReceptionCu
     passengerPhone: event.phone, passengerName: customer?.name ?? customer?.displayName ?? '',
     // Zero coordinates mean unknown; no invented customer location.
     pickup: typeof address === 'object' ? address : { name: address ?? '', coords: { x: 0, y: 0 } },
-    totalFare: 0, movingFee: false, status: 'pending', driverId: null, shiftId: null,
+    totalFare: null, movingFee: false, status: 'pending', driverId: null, shiftId: null,
     createdAt: new Date(), updatedAt: new Date(),
   };
 }

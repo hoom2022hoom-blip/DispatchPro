@@ -1,0 +1,10 @@
+const fs=require('node:fs'),path=require('node:path'),{spawnSync}=require('node:child_process');
+const c=JSON.parse(fs.readFileSync(process.argv[2])),out=path.resolve(process.argv[3]);
+const {pgEnv}=require('../../artifacts/home-runtime-update-20261010/pg-tools.cjs');
+if(!c.database.startsWith('dispatchpro_driverqa_')||!c.role.startsWith('driverqa_'))throw Error('QA configuration rejected');
+fs.mkdirSync(path.join(out,'private'),{recursive:true});
+const esc=v=>'"'+String(v).replaceAll('"','""')+'"';
+const admin=`Host=${esc(pgEnv.PGHOST)};Port=${esc(pgEnv.PGPORT)};Database=postgres;Username=${esc(pgEnv.PGUSER)};Password=${esc(pgEnv.PGPASSWORD)}`;
+const log=fs.openSync(path.join(out,'private/backend-tests.log'),'w');
+const r=spawnSync('dotnet',['test','backend/DispatchPro.Tests/DispatchPro.Tests.csproj','--filter','FullyQualifiedName~QaOfficeAudioTests|FullyQualifiedName~DriverQaSafetyTests|FullyQualifiedName~MobileCommunicationUpgradeTests','--artifacts-path',path.join(out,'dotnet'),'--logger','trx;LogFileName=audio-backend.trx','--results-directory',out],{cwd:c.root,windowsHide:true,env:{...process.env,TAXI_TEST_POSTGRES:admin,TAXI_QA_TEST_POSTGRES:c.connection},stdio:['ignore',log,log]});fs.closeSync(log);
+console.log(JSON.stringify({exitCode:r.status,results:path.join(out,'audio-backend.trx'),productionDatabaseOpened:false,existingQaDatabaseWritten:false}));process.exitCode=r.status??1;

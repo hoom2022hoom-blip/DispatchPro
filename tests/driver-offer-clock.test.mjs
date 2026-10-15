@@ -8,8 +8,8 @@ test('Offer countdown uses server UTC across phone skew, long polls, timezone of
   t.mock.method(Date,'now',()=>Date.parse('2026-10-02T12:00:00Z'));
   let serverTime='2026-10-01T15:00:00+03:00';
   const api=createDriverApi(async url=>{
-    if(url.includes('updates')){elapsed+=25000;return Response.json({serverTime,cursor:'same',data:{rides:[]}});}
-    return Response.json(url.endsWith('auth/login')?{accessToken:'token'}:{id:'driver'});
+    if(url.includes('updates')){elapsed+=25000;return Response.json({serverTime,cursor:'same',data:{driver:{id:'driver',status:'Available'},rides:[]}});}
+    return Response.json(url.endsWith('auth/driver-login')?{accessToken:'token'}:{id:'driver',status:'Available'});
   });
   await api.login('office','driver','password');
   await api.updates();

@@ -34,7 +34,7 @@ public sealed class DriverOfflineReceptionTests
                 var driver=new Driver{UserId=user.Id,FullName="Offline driver",Status=DriverStatus.Offline};driverId=driver.Id;db.Add(driver);await db.SaveChangesAsync();
             }
             using var client=factory.CreateClient();client.DefaultRequestHeaders.Authorization=new AuthenticationHeaderValue("Bearer",token);
-            var payload=new JsonObject{["id"]="driver-availability-request",["status"]="assigned",["driverId"]=driverId.ToString(),["source"]="MANUAL",["passengerName"]="Test",["passengerPhone"]="0591234567",["pickup"]=new JsonObject{["name"]="Pickup",["coords"]=new JsonObject{["x"]=0,["y"]=0}},["totalFare"]=10,["movingFee"]=false};
+            var payload=new JsonObject{["id"]="driver-availability-request",["status"]="assigned",["driverId"]=driverId.ToString(),["source"]="MANUAL",["passengerName"]="Test",["passengerPhone"]="0591234567",["pickup"]=new JsonObject{["name"]="Pickup",["coords"]=new JsonObject{["x"]=0,["y"]=0}},["dropoff"]=new JsonObject{["name"]="Destination"},["totalFare"]=10,["movingFee"]=false};
             const string path="/api/v1/reception/rides/driver-availability-request";
             Assert.Equal(HttpStatusCode.Conflict,(await client.PutAsJsonAsync(path,payload)).StatusCode);
             using(var scope=factory.Services.CreateScope())
